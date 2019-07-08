@@ -34,8 +34,10 @@ def train(
     if multi_scale:  # pass maximum multi_scale size
         img_size = 608
     else:
+        # 让内置的 cuDNN 的 auto-tuner 自动寻找最适合当前配置的高效算法，来达到优化运行效率的问题
         torch.backends.cudnn.benchmark = True
-
+    
+    # 创建目录，保存最优和最新的权重路径
     os.makedirs(weights_path, exist_ok=True)
     latest_weights_file = os.path.join(weights_path, 'latest.pt')
     best_weights_file = os.path.join(weights_path, 'best.pt')
@@ -46,9 +48,11 @@ def train(
     train_path = data_config['train']
 
     # Initialize model
+    # 初始化模型，实例化darknet类（待看）
     model = Darknet(net_config_path, img_size)
 
     # Get dataloader
+    # 获取数据加载器
     dataloader = load_images_and_labels(train_path, batch_size=batch_size, img_size=img_size,
                                         multi_scale=multi_scale, augment=True)
 
@@ -104,7 +108,9 @@ def train(
     # Set scheduler
     # scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[54, 61], gamma=0.1)
 
+    # 打印模型信息
     model_info(model)
+
     t0 = time.time()
     mean_recall, mean_precision = 0, 0
     for epoch in range(epochs):
@@ -117,6 +123,7 @@ def train(
         # scheduler.step()
 
         # Update scheduler (manual)  at 0, 54, 61 epochs to 1e-3, 1e-4, 1e-5
+        # 在此更改学习率
         if epoch > 50:
             lr = lr0 / 10
         else:
@@ -125,6 +132,7 @@ def train(
             g['lr'] = lr
 
         # Freeze darknet53.conv.74 layers for first epoch
+        # 在第一次训练中冻结darknet53.conv.74中的网络
         if freeze_backbone:
             if epoch == 0:
                 for i, (name, p) in enumerate(model.named_parameters()):
@@ -137,7 +145,7 @@ def train(
 
         ui = -1
         rloss = defaultdict(float)  # running loss
-        metrics = torch.zeros(3, num_classes)
+        metrics = torch.zeros(3, num_classes) # 分类权重矩阵
         optimizer.zero_grad()
         for i, (imgs, targets) in enumerate(dataloader):
             if sum([len(x) for x in targets]) < 1:  # if no targets continue
