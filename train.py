@@ -1,7 +1,7 @@
 import argparse
 import time
 
-import torch.distributed as dist
+import torch.distributed as dist # https://www.jianshu.com/p/5f6cd6b50140（多GPU运行的组件）
 import torch.optim as optim
 import torch.optim.lr_scheduler as lr_scheduler
 from torch.utils.data import DataLoader
@@ -48,17 +48,20 @@ def train(
         img_size = img_size_max * 32  # initiate with maximum multi_scale size
 
     # Configure run
+    # 解析数据配置文件路径得到数据
     data_dict = parse_data_cfg(data_cfg)
     train_path = data_dict['train']
     nc = int(data_dict['classes'])  # number of classes
 
     # Initialize model
+    # 初始化darknet网络模型
     model = Darknet(cfg).to(device)
 
     # Optimizer
+    # 设置梯度优化器
     optimizer = optim.SGD(model.parameters(), lr=hyp['lr0'], momentum=hyp['momentum'], weight_decay=hyp['weight_decay'])
 
-    cutoff = -1  # backbone reaches to cutoff layer
+    cutoff = -1  # backbone reaches to cutoff layer（主干到达截止层）
     start_epoch = 0
     best_fitness = 0.0
     if opt.resume or opt.transfer:  # Load previously saved model
