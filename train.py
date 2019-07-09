@@ -11,10 +11,7 @@ from models import *
 from utils.datasets import *
 from utils.utils import *
 
-#     0.0945      0.279      0.114      0.131         25      0.035        0.2        0.1      0.035         79       1.61       3.53       0.29      0.001         -4        0.9     0.0005   320
-#      0.149      0.241      0.126      0.156       6.85      1.008      1.421    0.07989      16.94      6.215      10.61      4.272      0.251      0.001         -4        0.9     0.0005   320 giou
-#      0.111       0.27      0.132      0.131       3.96      1.276     0.3156     0.1425      21.21      6.224      11.59       8.83      0.376      0.001         -4        0.9     0.0005   320
-#      0.114      0.287      0.144      0.132        7.1      1.666      4.046     0.1364       42.6       3.34      12.61      8.338     0.2705      0.001         -4        0.9     0.0005   320 giou + best_anchor False
+#      0.109      0.297       0.15      0.126       7.04      1.666      4.062     0.1845       42.6       3.34      12.61      8.338     0.2705      0.001         -4        0.9     0.0005   320 giou + best_anchor False
 hyp = {'giou': 1.666,  # giou loss gain
        'xy': 4.062,  # xy loss gain
        'wh': 0.1845,  # wh loss gain
@@ -43,7 +40,6 @@ def train(
     latest = weights + 'latest.pt'
     best = weights + 'best.pt'
     device = torch_utils.select_device()
-    img_size_test = img_size  # image size for testing
     multi_scale = not opt.single_scale
 
     if multi_scale:
@@ -65,23 +61,31 @@ def train(
     cutoff = -1  # backbone reaches to cutoff layer
     start_epoch = 0
     best_fitness = 0.0
-    nf = int(model.module_defs[model.yolo_layers[0] - 1]['filters'])  # yolo layer size (i.e. 255)
     if opt.resume or opt.transfer:  # Load previously saved model
         if opt.transfer:  # Transfer learning
+            nf = int(model.module_defs[model.yolo_layers[0] - 1]['filters'])  # yolo layer size (i.e. 255)
             chkpt = torch.load(weights + 'yolov3-spp.pt', map_location=device)
             model.load_state_dict({k: v for k, v in chkpt['model'].items() if v.numel() > 1 and v.shape[0] != 255},
                                   strict=False)
+
             for p in model.parameters():
                 p.requires_grad = True if p.shape[0] == nf else False
 
         else:  # resume from latest.pt
+            if opt.bucket:
+                os.system('gsutil cp gs://%s/latest.pt %s' % (opt.bucket, latest))  # download from bucket
             chkpt = torch.load(latest, map_location=device)  # load checkpoint
             model.load_state_dict(chkpt['model'])
 
-        start_epoch = chkpt['epoch'] + 1
         if chkpt['optimizer'] is not None:
             optimizer.load_state_dict(chkpt['optimizer'])
             best_fitness = chkpt['best_fitness']
+
+        if chkpt['training_results'] is not None:
+            with open('results.txt', 'w') as file:
+                file.write(chkpt['training_results'])  # write results.txt
+
+        start_epoch = chkpt['epoch'] + 1
         del chkpt
 
     else:  # Initialize model with backbone (optional)
@@ -114,12 +118,11 @@ def train(
     # plt.savefig('LR.png', dpi=300)
 
     # Dataset
-    rectangular_training = False
     dataset = LoadImagesAndLabels(train_path,
                                   img_size,
                                   batch_size,
                                   augment=True,
-                                  rect=rectangular_training)
+                                  rect=opt.rect)  # rectangular training
 
     # Initialize distributed training
     if torch.cuda.device_count() > 1:
@@ -135,7 +138,7 @@ def train(
     dataloader = DataLoader(dataset,
                             batch_size=batch_size,
                             num_workers=opt.num_workers,
-                            shuffle=not rectangular_training,  # Shuffle=True unless rectangular training is used
+                            shuffle=not opt.rect,  # Shuffle=True unless rectangular training is used
                             pin_memory=True,
                             collate_fn=dataset.collate_fn)
 
@@ -144,7 +147,7 @@ def train(
     if mixed_precision:
         try:
             from apex import amp
-            model, optimizer = amp.initialize(model, optimizer, opt_level='O1')
+            model, optimizer = amp.initialize(model, optimizer, opt_level='O1', verbosity=0)
         except:  # not installed: install help: https://github.com/NVIDIA/apex/issues/259
             mixed_precision = False
 
@@ -160,7 +163,7 @@ def train(
     for epoch in range(start_epoch, epochs):
         model.train()
         print(('\n%8s%12s' + '%10s' * 7) %
-              ('Epoch', 'Batch', 'xy', 'wh', 'obj', 'cls', 'total', 'targets', 'img_size'))
+              ('Epoch', 'Batch', 'GIoU/xy', 'wh', 'obj', 'cls', 'total', 'targets', 'img_size'))
 
         # Update scheduler
         scheduler.step()
@@ -236,7 +239,7 @@ def train(
         # Calculate mAP (always test final epoch, skip first 5 if opt.nosave)
         if not (opt.notest or (opt.nosave and epoch < 10)) or epoch == epochs - 1:
             with torch.no_grad():
-                results, maps = test.test(cfg, data_cfg, batch_size=batch_size, img_size=img_size_test, model=model,
+                results, maps = test.test(cfg, data_cfg, batch_size=batch_size, img_size=opt.img_size, model=model,
                                           conf_thres=0.1)
 
         # Write epoch results
@@ -249,17 +252,21 @@ def train(
             best_fitness = fitness
 
         # Save training results
-        save = (not opt.nosave) or (epoch == epochs - 1)
+        save = (not opt.nosave) or ((not opt.evolve) and (epoch == epochs - 1))
         if save:
-            # Create checkpoint
-            chkpt = {'epoch': epoch,
-                     'best_fitness': best_fitness,
-                     'model': model.module.state_dict() if type(
-                         model) is nn.parallel.DistributedDataParallel else model.state_dict(),
-                     'optimizer': optimizer.state_dict()}
+            with open('results.txt', 'r') as file:
+                # Create checkpoint
+                chkpt = {'epoch': epoch,
+                         'best_fitness': best_fitness,
+                         'training_results': file.read(),
+                         'model': model.module.state_dict() if type(
+                             model) is nn.parallel.DistributedDataParallel else model.state_dict(),
+                         'optimizer': optimizer.state_dict()}
 
             # Save latest checkpoint
             torch.save(chkpt, latest)
+            if opt.bucket:
+                os.system('gsutil cp %s gs://%s' % (latest, opt.bucket))  # upload to bucket
 
             # Save best checkpoint
             if best_fitness == fitness:
@@ -282,11 +289,11 @@ def print_mutation(hyp, results):
     c = '%11.3g' * len(results) % results  # results (P, R, mAP, F1, test_loss)
     print('\n%s\n%s\nEvolved fitness: %s\n' % (a, b, c))
 
-    if opt.cloud_evolve:
-        os.system('gsutil cp gs://yolov4/evolve.txt .')  # download evolve.txt
+    if opt.bucket:
+        os.system('gsutil cp gs://%s/evolve.txt .' % opt.bucket)  # download evolve.txt
         with open('evolve.txt', 'a') as f:  # append result
             f.write(c + b + '\n')
-        os.system('gsutil cp evolve.txt gs://yolov4')  # upload evolve.txt
+        os.system('gsutil cp evolve.txt gs://%s' % opt.bucket)  # upload evolve.txt
     else:
         with open('evolve.txt', 'a') as f:
             f.write(c + b + '\n')
@@ -301,6 +308,7 @@ if __name__ == '__main__':
     parser.add_argument('--data-cfg', type=str, default='data/coco_64img.data', help='coco.data file path')
     parser.add_argument('--single-scale', action='store_true', help='train at fixed size (no multi-scale)')
     parser.add_argument('--img-size', type=int, default=416, help='inference size (pixels)')
+    parser.add_argument('--rect', action='store_true', help='rectangular training')
     parser.add_argument('--resume', action='store_true', help='resume training flag')
     parser.add_argument('--transfer', action='store_true', help='transfer learning flag')
     parser.add_argument('--num-workers', type=int, default=4, help='number of Pytorch DataLoader workers')
@@ -308,12 +316,11 @@ if __name__ == '__main__':
     parser.add_argument('--notest', action='store_true', help='only test final epoch')
     parser.add_argument('--xywh', action='store_true', help='use xywh loss instead of GIoU loss')
     parser.add_argument('--evolve', action='store_true', help='evolve hyperparameters')
-    parser.add_argument('--cloud-evolve', action='store_true', help='evolve hyperparameters from a cloud source')
+    parser.add_argument('--bucket', type=str, default='', help='gsutil bucket')
     parser.add_argument('--var', default=0, type=int, help='debug variable')
     opt = parser.parse_args()
     print(opt)
 
-    opt.evolve = opt.cloud_evolve or opt.evolve
     if opt.evolve:
         opt.notest = True  # only test final epoch
         opt.nosave = True  # only save final checkpoint

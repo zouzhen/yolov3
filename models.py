@@ -251,7 +251,12 @@ def load_darknet_weights(self, weights, cutoff=-1):
     # Try to download weights if not available locally
     if not os.path.isfile(weights):
         try:
-            os.system('wget https://pjreddie.com/media/files/' + weights_file + ' -O ' + weights)
+            url = 'https://pjreddie.com/media/files/' + weights_file
+            print('Downloading ' + url + ' to ' + weights)
+            os.system('curl ' + url + ' -o ' + weights)
+            import requests
+            r = requests.get(url)
+
         except IOError:
             print(weights + ' not found.\nTry https://drive.google.com/drive/folders/1uxgUBemJVw9wZsdpboYbzUN4bcRhsuAI')
 
@@ -349,7 +354,13 @@ def convert(cfg='cfg/yolov3-spp.cfg', weights='weights/yolov3-spp.weights'):
 
     elif weights.endswith('.weights'):  # darknet format
         _ = load_darknet_weights(model, weights)
-        chkpt = {'epoch': -1, 'best_loss': None, 'model': model.state_dict(), 'optimizer': None}
+
+        chkpt = {'epoch': -1,
+                 'best_fitness': None,
+                 'training_results': None,
+                 'model': model.state_dict(),
+                 'optimizer': None}
+
         torch.save(chkpt, 'converted.pt')
         print("Success: converted '%s' to 'converted.pt'" % weights)
 
