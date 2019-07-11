@@ -10,11 +10,32 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 from tqdm import tqdm
+from PIL import Image, ExifTags
 
 from utils.utils import xyxy2xywh, xywh2xyxy
 
 img_formats = ['.bmp', '.jpg', '.jpeg', '.png', '.tif']
 vid_formats = ['.mov', '.avi', '.mp4']
+
+# Get orientation exif tag
+for orientation in ExifTags.TAGS.keys():
+    if ExifTags.TAGS[orientation] == 'Orientation':
+        break
+
+
+def exif_size(img):
+    # Returns exif-corrected PIL size
+    s = img.size  # (width, height)
+    try:
+        rotation = dict(img._getexif().items())[orientation]
+        if rotation == 6:  # rotation 270
+            s = (s[1], s[0])
+        elif rotation == 8:  # rotation 90
+            s = (s[1], s[0])
+    except:
+        None
+
+    return s
 
 
 class LoadImages:  # for inference
@@ -154,17 +175,15 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
 
         # Rectangular Training  https://github.com/ultralytics/yolov3/issues/232
         if self.rect:
-            from PIL import Image
-
             # Read image shapes
             sp = 'data' + os.sep + path.replace('.txt', '.shapes').split(os.sep)[-1]  # shapefile path
-            if os.path.exists(sp):  # read existing shapefile
-                with open(sp, 'r') as f:
-                    s = np.array([x.split() for x in f.read().splitlines()], dtype=np.float32)
-                assert len(s) == n, 'Shapefile out of sync, please delete %s and rerun' % sp
-            else:  # no shapefile, so read shape using PIL and write shapefile for next time (faster)
-                s = np.array([Image.open(f).size for f in tqdm(self.img_files, desc='Reading image shapes')])
+            if not os.path.exists(sp):  # read shapes using PIL and write shapefile for next time (faster)
+                s = [exif_size(Image.open(f)) for f in tqdm(self.img_files, desc='Reading image shapes')]
                 np.savetxt(sp, s, fmt='%g')
+
+            with open(sp, 'r') as f:  # read existing shapefile
+                s = np.array([x.split() for x in f.read().splitlines()], dtype=np.float64)
+                assert len(s) == n, 'Shapefile error. Please delete %s and rerun' % sp  # TODO: auto-delete shapefile
 
             # Sort by aspect ratio
             ar = s[:, 1] / s[:, 0]  # aspect ratio
@@ -222,6 +241,16 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                 except:
                     pass  # print('Warning: missing labels for %s' % self.img_files[i])  # missing label file
             assert len(np.concatenate(self.labels, 0)) > 0, 'No labels found. Incorrect label paths provided.'
+
+        # Detect corrupted images https://medium.com/joelthchao/programmatically-detect-corrupted-image-8c1b2006c3d3
+        detect_corrupted_images = False
+        if detect_corrupted_images:
+            from skimage import io  # conda install -c conda-forge scikit-image
+            for file in tqdm(self.img_files, desc='Detecting corrupted images'):
+                try:
+                    _ = io.imread(file)
+                except:
+                    print('Corrupted image detected: %s' % file)
 
     def __len__(self):
         return len(self.img_files)
@@ -342,6 +371,7 @@ def letterbox(img, new_shape=416, color=(127.5, 127.5, 127.5), mode='auto'):
     # Resize a rectangular image to a 32 pixel multiple rectangle
     # https://github.com/ultralytics/yolov3/issues/232
     shape = img.shape[:2]  # current shape [height, width]
+
     if isinstance(new_shape, int):
         ratio = float(new_shape) / max(shape)
     else:

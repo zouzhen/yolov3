@@ -15,7 +15,7 @@ from utils.utils import *
 hyp = {'giou': 1.666,  # giou loss gain
        'xy': 4.062,  # xy loss gain
        'wh': 0.1845,  # wh loss gain
-       'cls': 42.6,  # cls loss gain
+       'cls': 1.0,  # cls loss gain
        'cls_pw': 3.34,  # cls BCELoss positive_weight
        'obj': 12.61,  # obj loss gain
        'obj_pw': 8.338,  # obj BCELoss positive_weight
@@ -31,8 +31,8 @@ def train(
         data_cfg,
         img_size=416,
         epochs=100,  # 500200 batches at bs 16, 117263 images = 273 epochs
-        batch_size=8,
-        accumulate=8,  # effective bs = batch_size * accumulate = 8 * 8 = 64
+        batch_size=16,
+        accumulate=4,  # effective bs = batch_size * accumulate = 8 * 8 = 64
         freeze_backbone=False,
 ):
     init_seeds()
@@ -40,7 +40,7 @@ def train(
     latest = weights + 'latest.pt'
     best = weights + 'best.pt'
     device = torch_utils.select_device()
-    multi_scale = not opt.single_scale
+    multi_scale = opt.multi_scale
 
     if multi_scale:
         img_size_min = round(img_size / 32 / 1.5)
@@ -302,11 +302,11 @@ def print_mutation(hyp, results):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--epochs', type=int, default=100, help='number of epochs')
-    parser.add_argument('--batch-size', type=int, default=8, help='batch size')
-    parser.add_argument('--accumulate', type=int, default=8, help='number of batches to accumulate before optimizing')
+    parser.add_argument('--batch-size', type=int, default=16, help='batch size')
+    parser.add_argument('--accumulate', type=int, default=4, help='number of batches to accumulate before optimizing')
     parser.add_argument('--cfg', type=str, default='cfg/yolov3-spp.cfg', help='cfg file path')
     parser.add_argument('--data-cfg', type=str, default='data/coco_64img.data', help='coco.data file path')
-    parser.add_argument('--single-scale', action='store_true', help='train at fixed size (no multi-scale)')
+    parser.add_argument('--multi-scale', action='store_true', help='train at (1/1.5)x - 1.5x sizes')
     parser.add_argument('--img-size', type=int, default=416, help='inference size (pixels)')
     parser.add_argument('--rect', action='store_true', help='rectangular training')
     parser.add_argument('--resume', action='store_true', help='resume training flag')
