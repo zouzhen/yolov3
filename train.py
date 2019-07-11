@@ -106,6 +106,7 @@ def train(
     # lf = lambda x: 10 ** (hyp['lrf'] * x / epochs)  # exp ramp
     # lf = lambda x: 1 - 10 ** (hyp['lrf'] * (1 - x / epochs))  # inverse exp ramp
     # scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lf)
+    # 动态调整学习率
     scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[round(opt.epochs * x) for x in (0.8, 0.9)], gamma=0.1)
     scheduler.last_epoch = start_epoch - 1
 
@@ -121,6 +122,7 @@ def train(
     # plt.savefig('LR.png', dpi=300)
 
     # Dataset
+    # 加载数据集
     dataset = LoadImagesAndLabels(train_path,
                                   img_size,
                                   batch_size,
@@ -146,6 +148,7 @@ def train(
                             collate_fn=dataset.collate_fn)
 
     # Mixed precision training https://github.com/NVIDIA/apex
+    # 混合精度
     mixed_precision = True
     if mixed_precision:
         try:
@@ -155,7 +158,7 @@ def train(
             mixed_precision = False
 
     # Start training
-    model.hyp = hyp  # attach hyperparameters to model
+    model.hyp = hyp  # attach hyperparameters to model（将超参数添加到模型）
     # model.class_weights = labels_to_class_weights(dataset.labels, nc).to(device)  # attach class weights
     model_info(model, report='summary')  # 'full' or 'summary'
     nb = len(dataloader)
@@ -223,6 +226,7 @@ def train(
                 loss.backward()
 
             # Accumulate gradient for x batches before optimizing
+            # 在优化前累积x批次的梯度
             if (i + 1) % accumulate == 0 or (i + 1) == nb:
                 optimizer.step()
                 optimizer.zero_grad()
@@ -240,6 +244,7 @@ def train(
         print('%g epochs completed in %.3f hours.' % (epoch - start_epoch + 1, dt))
 
         # Calculate mAP (always test final epoch, skip first 5 if opt.nosave)
+        # 计算mAP(始终测试最后一个时期，如果opt.nosave，跳过第一个5)
         if not (opt.notest or (opt.nosave and epoch < 10)) or epoch == epochs - 1:
             with torch.no_grad():
                 results, maps = test.test(cfg, data_cfg, batch_size=batch_size, img_size=opt.img_size, model=model,
@@ -287,6 +292,7 @@ def train(
 
 def print_mutation(hyp, results):
     # Write mutation results
+    # 记录突变结果
     a = '%11s' * len(hyp) % tuple(hyp.keys())  # hyperparam keys
     b = '%11.4g' * len(hyp) % tuple(hyp.values())  # hyperparam values
     c = '%11.3g' * len(results) % results  # results (P, R, mAP, F1, test_loss)
