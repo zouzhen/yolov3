@@ -12,32 +12,55 @@ from utils.datasets import *
 from utils.utils import *
 
 #      0.109      0.297       0.15      0.126       7.04      1.666      4.062     0.1845       42.6       3.34      12.61      8.338     0.2705      0.001         -4        0.9     0.0005   320 giou + best_anchor False
-hyp = {'giou': 1.666,  # giou loss gain
+#      0.223      0.218      0.138      0.189       9.28      1.153      4.376    0.08263      24.28       3.05      20.93      2.842     0.2759   0.001357     -5.036     0.9158  0.0005722   mAP/F1 - 50/50 weighting
+#      0.231      0.215      0.135      0.191       9.51      1.432      3.007    0.06082      24.87      3.477      24.13      2.802     0.3436   0.001127     -5.036     0.9232  0.0005874
+#      0.246      0.194      0.128      0.192       8.12      1.101      3.954     0.0817      22.83      3.967      19.83      1.779     0.3352   0.000895     -5.036     0.9238  0.0007973
+# 0.242	0.296	0.196	0.231	5.67	0.8541	4.286	0.1539	21.61	1.957	22.9	2.894	0.3689	0.001844	-4	0.913	0.000467  # ha
+# 0.298	0.244	0.167	0.247	4.99	0.8896	4.067	0.1694	21.41	2.033	25.61	1.783	0.4115	0.00128	    -4	0.950	0.000377  # hb
+# 0.268	0.268	0.178	0.240	4.36	1.104	5.596	0.2087	14.47	2.599	16.27	2.406	0.4114	0.001585	-4	0.950	0.000524  # hc
+# 0.161	0.327	0.190	0.193	7.82	1.153	4.062	0.1845	24.28	3.05	20.93	2.842	0.2759	0.001357	-4	0.916	0.000572  # hd 320 --epochs 2
+
+
+# Training hyperparameters a
+hyp = {'giou': 0.8541,  # giou loss gain
        'xy': 4.062,  # xy loss gain
        'wh': 0.1845,  # wh loss gain
-       'cls': 1.0,  # cls loss gain
-       'cls_pw': 3.34,  # cls BCELoss positive_weight
-       'obj': 12.61,  # obj loss gain
-       'obj_pw': 8.338,  # obj BCELoss positive_weight
-       'iou_t': 0.2705,  # iou target-anchor training threshold
-       'lr0': 0.001,  # initial learning rate
+       'cls': 21.61,  # cls loss gain
+       'cls_pw': 1.957,  # cls BCELoss positive_weight
+       'obj': 22.9,  # obj loss gain
+       'obj_pw': 2.894,  # obj BCELoss positive_weight
+       'iou_t': 0.3689,  # iou target-anchor training threshold
+       'lr0': 0.001844,  # initial learning rate
        'lrf': -4.,  # final learning rate = lr0 * (10 ** lrf)
-       'momentum': 0.90,  # SGD momentum
-       'weight_decay': 0.0005}  # optimizer weight decay
+       'momentum': 0.913,  # SGD momentum
+       'weight_decay': 0.000467}  # optimizer weight decay
 
 
-def train(
-        cfg,
-        data_cfg,
-        img_size=416,
-        epochs=100,  # 500200 batches at bs 16, 117263 images = 273 epochs
-        batch_size=16,
-        accumulate=4,  # effective bs = batch_size * accumulate = 8 * 8 = 64
-        freeze_backbone=False,
-):
+# Training hyperparameters d
+# hyp = {'giou': 1.153,  # giou loss gain
+#        'xy': 4.062,  # xy loss gain
+#        'wh': 0.1845,  # wh loss gain
+#        'cls': 24.28,  # cls loss gain
+#        'cls_pw': 3.05,  # cls BCELoss positive_weight
+#        'obj': 20.93,  # obj loss gain
+#        'obj_pw': 2.842,  # obj BCELoss positive_weight
+#        'iou_t': 0.2759,  # iou target-anchor training threshold
+#        'lr0': 0.001357,  # initial learning rate
+#        'lrf': -4.,  # final learning rate = lr0 * (10 ** lrf)
+#        'momentum': 0.916,  # SGD momentum
+#        'weight_decay': 0.000572}  # optimizer weight decay
+
+
+def train(cfg,
+          data_cfg,
+          img_size=416,
+          epochs=100,  # 500200 batches at bs 16, 117263 images = 273 epochs
+          batch_size=16,
+          accumulate=4):  # effective bs = batch_size * accumulate = 8 * 8 = 64
+    # Initialize
     init_seeds()
     weights = 'weights' + os.sep
-    latest = weights + 'latest.pt'
+    last = weights + 'last.pt'
     best = weights + 'best.pt'
     device = torch_utils.select_device()
     multi_scale = opt.multi_scale
@@ -71,10 +94,10 @@ def train(
             for p in model.parameters():
                 p.requires_grad = True if p.shape[0] == nf else False
 
-        else:  # resume from latest.pt
+        else:  # resume from last.pt
             if opt.bucket:
-                os.system('gsutil cp gs://%s/latest.pt %s' % (opt.bucket, latest))  # download from bucket
-            chkpt = torch.load(latest, map_location=device)  # load checkpoint
+                os.system('gsutil cp gs://%s/last.pt %s' % (opt.bucket, last))  # download from bucket
+            chkpt = torch.load(last, map_location=device)  # load checkpoint
             model.load_state_dict(chkpt['model'])
 
         if chkpt['optimizer'] is not None:
@@ -159,16 +182,17 @@ def train(
     maps = np.zeros(nc)  # mAP per class
     results = (0, 0, 0, 0, 0)  # P, R, mAP, F1, test_loss
     n_burnin = min(round(nb / 5 + 1), 1000)  # burn-in batches
-    t, t0 = time.time(), time.time()
+    t0 = time.time()
     for epoch in range(start_epoch, epochs):
         model.train()
-        print(('\n%8s%12s' + '%10s' * 7) %
-              ('Epoch', 'Batch', 'GIoU/xy', 'wh', 'obj', 'cls', 'total', 'targets', 'img_size'))
+        print(('\n' + '%10s' * 9) %
+              ('Epoch', 'gpu_mem', 'GIoU/xy', 'wh', 'obj', 'cls', 'total', 'targets', 'img_size'))
 
         # Update scheduler
         scheduler.step()
 
         # Freeze backbone at epoch 0, unfreeze at epoch 1 (optional)
+        freeze_backbone = False
         if freeze_backbone and epoch < 2:
             for name, p in model.named_parameters():
                 if int(name.split('.')[1]) < cutoff:  # if layer < 75
@@ -226,15 +250,10 @@ def train(
 
             # Print batch results
             mloss = (mloss * i + loss_items) / (i + 1)  # update mean losses
-            # s = ('%8s%12s' + '%10.3g' * 7) % ('%g/%g' % (epoch, epochs - 1), '%g/%g' % (i, nb - 1), *mloss, len(targets), time.time() - t)
-            s = ('%8s%12s' + '%10.3g' * 7) % (
-                '%g/%g' % (epoch, epochs - 1), '%g/%g' % (i, nb - 1), *mloss, len(targets), img_size)
-            t = time.time()
+            mem = torch.cuda.memory_cached() / 1E9 if torch.cuda.is_available() else 0  # (GB)
+            s = ('%10s' * 2 + '%10.3g' * 7) % (
+                '%g/%g' % (epoch, epochs - 1), '%.3gG' % mem, *mloss, len(targets), img_size)
             pbar.set_description(s)  # print(s)
-
-        # Report time
-        dt = (time.time() - t0) / 3600
-        print('%g epochs completed in %.3f hours.' % (epoch - start_epoch + 1, dt))
 
         # Calculate mAP (always test final epoch, skip first 5 if opt.nosave)
         if not (opt.notest or (opt.nosave and epoch < 10)) or epoch == epochs - 1:
@@ -263,10 +282,10 @@ def train(
                              model) is nn.parallel.DistributedDataParallel else model.state_dict(),
                          'optimizer': optimizer.state_dict()}
 
-            # Save latest checkpoint
-            torch.save(chkpt, latest)
+            # Save last checkpoint
+            torch.save(chkpt, last)
             if opt.bucket:
-                os.system('gsutil cp %s gs://%s' % (latest, opt.bucket))  # upload to bucket
+                os.system('gsutil cp %s gs://%s' % (last, opt.bucket))  # upload to bucket
 
             # Save best checkpoint
             if best_fitness == fitness:
@@ -278,6 +297,9 @@ def train(
 
             # Delete checkpoint
             del chkpt
+
+    # Report time
+    print('%g epochs completed in %.3f hours.' % (epoch - start_epoch + 1, (time.time() - t0) / 3600))
 
     return results
 
@@ -341,21 +363,21 @@ if __name__ == '__main__':
         for _ in range(gen):
             # Get best hyperparameters
             x = np.loadtxt('evolve.txt', ndmin=2)
-            fitness = x[:, 2] * 0.9 + x[:, 3] * 0.1  # fitness as weighted combination of mAP and F1
+            fitness = x[:, 2] * 0.5 + x[:, 3] * 0.5  # fitness as weighted combination of mAP and F1
             x = x[fitness.argmax()]  # select best fitness hyps
             for i, k in enumerate(hyp.keys()):
                 hyp[k] = x[i + 5]
 
             # Mutate
             init_seeds(seed=int(time.time()))
-            s = [.2, .2, .2, .2, .2, .2, .2, .2, .2 * 0, .2 * 0, .05 * 0, .2 * 0]  # fractional sigmas
+            s = [.15, .15, .15, .15, .15, .15, .15, .15, .15, .00, .05, .10]  # fractional sigmas
             for i, k in enumerate(hyp.keys()):
                 x = (np.random.randn(1) * s[i] + 1) ** 2.0  # plt.hist(x.ravel(), 300)
                 hyp[k] *= float(x)  # vary by 20% 1sigma
 
             # Clip to limits
             keys = ['lr0', 'iou_t', 'momentum', 'weight_decay']
-            limits = [(1e-4, 1e-2), (0, 0.70), (0.70, 0.98), (0, 0.01)]
+            limits = [(1e-4, 1e-2), (0.00, 0.70), (0.60, 0.95), (0, 0.01)]
             for k, v in zip(keys, limits):
                 hyp[k] = np.clip(hyp[k], v[0], v[1])
 

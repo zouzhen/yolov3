@@ -8,18 +8,17 @@ from utils.datasets import *
 from utils.utils import *
 
 
-def test(
-        cfg,
-        data_cfg,
-        weights=None,
-        batch_size=16,
-        img_size=416,
-        iou_thres=0.5,
-        conf_thres=0.001,
-        nms_thres=0.5,
-        save_json=False,
-        model=None
-):
+def test(cfg,
+         data_cfg,
+         weights=None,
+         batch_size=16,
+         img_size=416,
+         iou_thres=0.5,
+         conf_thres=0.001,
+         nms_thres=0.5,
+         save_json=False,
+         model=None):
+    # Initialize/load model and set device
     if model is None:
         device = torch_utils.select_device()
 
@@ -54,10 +53,10 @@ def test(
     seen = 0
     model.eval()
     coco91class = coco80_to_coco91_class()
-    print(('%30s' + '%10s' * 6) % ('Class', 'Images', 'Targets', 'P', 'R', 'mAP', 'F1'))
+    s = ('%30s' + '%10s' * 6) % ('Class', 'Images', 'Targets', 'P', 'R', 'mAP', 'F1')
     loss, p, r, f1, mp, mr, map, mf1 = 0., 0., 0., 0., 0., 0., 0., 0.
     jdict, stats, ap, ap_class = [], [], [], []
-    for batch_i, (imgs, targets, paths, shapes) in enumerate(tqdm(dataloader, desc='Computing mAP')):
+    for batch_i, (imgs, targets, paths, shapes) in enumerate(tqdm(dataloader, desc=s)):
         targets = targets.to(device)
         imgs = imgs.to(device)
         _, _, height, width = imgs.shape  # batch size, channels, height, width
@@ -88,6 +87,9 @@ def test(
                     stats.append(([], torch.Tensor(), torch.Tensor(), tcls))
                 continue
 
+            # Clip boxes to image bounds
+            clip_coords(pred, (height, width))
+
             # Append to text file
             # with open('test.txt', 'a') as file:
             #    [file.write('%11.5g' * 7 % tuple(x) + '\n') for x in pred]
@@ -101,12 +103,10 @@ def test(
                 box = xyxy2xywh(box)  # xywh
                 box[:, :2] -= box[:, 2:] / 2  # xy center to top-left corner
                 for di, d in enumerate(pred):
-                    jdict.append({
-                        'image_id': image_id,
-                        'category_id': coco91class[int(d[6])],
-                        'bbox': [float3(x) for x in box[di]],
-                        'score': float(d[4])
-                    })
+                    jdict.append({'image_id': image_id,
+                                  'category_id': coco91class[int(d[6])],
+                                  'bbox': [float3(x) for x in box[di]],
+                                  'score': float(d[4])})
 
             # Assign all predictions as incorrect
             correct = [0] * len(pred)
@@ -144,10 +144,12 @@ def test(
 
     # Compute statistics
     stats = [np.concatenate(x, 0) for x in list(zip(*stats))]  # to numpy
-    nt = np.bincount(stats[3].astype(np.int64), minlength=nc)  # number of targets per class
     if len(stats):
         p, r, ap, f1, ap_class = ap_per_class(*stats)
         mp, mr, map, mf1 = p.mean(), r.mean(), ap.mean(), f1.mean()
+        nt = np.bincount(stats[3].astype(np.int64), minlength=nc)  # number of targets per class
+    else:
+        nt = torch.zeros(1)
 
     # Print results
     pf = '%30s' + '%10.3g' * 6  # print format
