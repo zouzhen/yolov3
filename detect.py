@@ -7,20 +7,19 @@ from utils.datasets import *
 from utils.utils import *
 
 
-def detect(
-        cfg,
-        data_cfg,
-        weights,
-        images='data/samples',  # input folder
-        output='output',  # output folder
-        fourcc='mp4v',
-        img_size=416,
-        conf_thres=0.5,
-        nms_thres=0.5,
-        save_txt=False,
-        save_images=True,
-        webcam=False
-):
+def detect(cfg,
+           data_cfg,
+           weights,
+           images='data/samples',  # input folder
+           output='output',  # output folder
+           fourcc='mp4v',  # video codec
+           img_size=416,
+           conf_thres=0.5,
+           nms_thres=0.5,
+           save_txt=False,
+           save_images=True,
+           webcam=False):
+    # Initialize
     device = torch_utils.select_device()
     torch.backends.cudnn.benchmark = False  # set False for reproducible results
     if os.path.exists(output):

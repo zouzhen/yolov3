@@ -181,9 +181,13 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                 s = [exif_size(Image.open(f)) for f in tqdm(self.img_files, desc='Reading image shapes')]
                 np.savetxt(sp, s, fmt='%g')
 
-            with open(sp, 'r') as f:  # read existing shapefile
-                s = np.array([x.split() for x in f.read().splitlines()], dtype=np.float64)
-                assert len(s) == n, 'Shapefile error. Please delete %s and rerun' % sp  # TODO: auto-delete shapefile
+            try:
+                with open(sp, 'r') as f:  # read existing shapefile
+                    s = np.array([x.split() for x in f.read().splitlines()], dtype=np.float64)
+                    assert len(s) == n, 'Shapefile out of sync'
+            except:
+                os.remove(sp)
+                print('Shapefile deleted: %s. Please rerun again.' % sp)
 
             # Sort by aspect ratio
             ar = s[:, 1] / s[:, 0]  # aspect ratio
@@ -273,8 +277,13 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         if img is None:
             img = cv2.imread(img_path)  # BGR
             assert img is not None, 'File Not Found ' + img_path
-            if self.n < 1001:
-                self.imgs[index] = img  # cache image into memory
+            r = self.img_size / max(img.shape)  # size ratio
+            if r < 1:  # downsize if target shape is smaller
+                h, w, _ = img.shape
+                img = cv2.resize(img, (int(w * r), int(h * r)), interpolation=cv2.INTER_AREA)
+
+            if self.n < 3000:  # cache into memory if image count < 3000
+                self.imgs[index] = img
 
         # Augment colorspace
         augment_hsv = True

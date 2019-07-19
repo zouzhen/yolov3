@@ -125,13 +125,19 @@ def xywh2xyxy(x):
 
 
 def scale_coords(img1_shape, coords, img0_shape):
-    # Rescale coords1 (xyxy) from img1_shape to img0_shape
+    # Rescale coords (xyxy) from img1_shape to img0_shape
     gain = max(img1_shape) / max(img0_shape)  # gain  = old / new
     coords[:, [0, 2]] -= (img1_shape[1] - img0_shape[1] * gain) / 2  # x padding
     coords[:, [1, 3]] -= (img1_shape[0] - img0_shape[0] * gain) / 2  # y padding
     coords[:, :4] /= gain
-    coords[:, :4] = coords[:, :4].clamp(min=0)
+    clip_coords(coords, img0_shape)
     return coords
+
+
+def clip_coords(boxes, img_shape):
+    # Clip bounding xyxy bounding boxes to image shape (height, width)
+    boxes[:, [0, 2]] = boxes[:, [0, 2]].clamp(min=0, max=img_shape[1])  # clip x
+    boxes[:, [1, 3]] = boxes[:, [1, 3]].clamp(min=0, max=img_shape[0])  # clip y
 
 
 def ap_per_class(tp, conf, pred_cls, target_cls):
@@ -281,7 +287,7 @@ def compute_loss(p, targets, model, giou_loss=True):  # predictions, targets, mo
     MSE = nn.MSELoss()
     BCEcls = nn.BCEWithLogitsLoss(pos_weight=ft([h['cls_pw']]))
     BCEobj = nn.BCEWithLogitsLoss(pos_weight=ft([h['obj_pw']]))
-    CE = nn.CrossEntropyLoss()  # (weight=model.class_weights)
+    # CE = nn.CrossEntropyLoss()  # (weight=model.class_weights)
 
     # Compute losses
     bs = p[0].shape[0]  # batch size
@@ -291,7 +297,8 @@ def compute_loss(p, targets, model, giou_loss=True):  # predictions, targets, mo
         tobj = torch.zeros_like(pi0[..., 0])  # target obj
 
         # Compute losses
-        if len(b):  # number of targets
+        nb = len(b)
+        if nb:  # number of targets
             pi = pi0[b, a, gj, gi]  # predictions closest to anchors
             tobj[b, a, gj, gi] = 1.0  # obj
             # pi[..., 2:4] = torch.sigmoid(pi[..., 2:4])  # wh power loss (uncomment)
@@ -304,10 +311,10 @@ def compute_loss(p, targets, model, giou_loss=True):  # predictions, targets, mo
                 lxy += (k * h['xy']) * MSE(torch.sigmoid(pi[..., 0:2]), txy[i])  # xy loss
                 lwh += (k * h['wh']) * MSE(pi[..., 2:4], twh[i])  # wh yolo loss
 
-            # tclsm = torch.zeros_like(pi[..., 5:])
-            # tclsm[range(len(b)), tcls[i]] = 1.0
-            # lcls += (k * h['cls']) * BCEcls(pi[..., 5:], tclsm)  # cls loss (BCE)
-            lcls += (k * h['cls']) * CE(pi[..., 5:], tcls[i])  # cls loss (CE)
+            tclsm = torch.zeros_like(pi[..., 5:])
+            tclsm[range(nb), tcls[i]] = 1.0
+            lcls += (k * h['cls']) * BCEcls(pi[..., 5:], tclsm)  # cls loss (BCE)
+            # lcls += (k * h['cls']) * CE(pi[..., 5:], tcls[i])  # cls loss (CE)
 
             # Append targets to text file
             # with open('targets.txt', 'a') as file:
@@ -580,7 +587,7 @@ def kmeans_targets(path='./data/coco_64img.txt'):  # from utils.utils import *; 
 # Plotting functions ---------------------------------------------------------------------------------------------------
 def plot_one_box(x, img, color=None, label=None, line_thickness=None):
     # Plots one bounding box on image img
-    tl = line_thickness or round(0.002 * max(img.shape[0:2])) + 1  # line thickness
+    tl = line_thickness or round(0.002 * (img.shape[0] + img.shape[1]) / 2) + 1  # line thickness
     color = color or [random.randint(0, 255) for _ in range(3)]
     c1, c2 = (int(x[0]), int(x[1])), (int(x[2]), int(x[3]))
     cv2.rectangle(img, c1, c2, color, thickness=tl)
@@ -678,7 +685,7 @@ def plot_results(start=0, stop=0):  # from utils.utils import *; plot_results()
 
     fig, ax = plt.subplots(2, 5, figsize=(14, 7))
     ax = ax.ravel()
-    s = ['X + Y', 'Width + Height', 'Confidence', 'Classification', 'Train Loss', 'Precision', 'Recall', 'mAP', 'F1',
+    s = ['GIoU/XY', 'Width/Height', 'Confidence', 'Classification', 'Train Loss', 'Precision', 'Recall', 'mAP', 'F1',
          'Test Loss']
     for f in sorted(glob.glob('results*.txt') + glob.glob('../../Downloads/results*.txt')):
         results = np.loadtxt(f, usecols=[2, 3, 4, 5, 6, 9, 10, 11, 12, 13]).T
