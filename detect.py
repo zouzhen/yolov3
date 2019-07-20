@@ -1,182 +1,143 @@
 import argparse
 import time
+from sys import platform
 
 from models import *
 from utils.datasets import *
 from utils.utils import *
 
-from utils import torch_utils
 
-
-def detect(
-        net_config_path,
-        data_config_path,
-        weights_file_path,
-        images_path,
-        output='output',
-        batch_size=16,
-        img_size=416,
-        conf_thres=0.3,
-        nms_thres=0.45,
-        save_txt=False,
-        save_images=False,
-):
+def detect(cfg,
+           data_cfg,
+           weights,
+           images='data/samples',  # input folder
+           output='output',  # output folder
+           fourcc='mp4v',  # video codec
+           img_size=416,
+           conf_thres=0.5,
+           nms_thres=0.5,
+           save_txt=False,
+           save_images=True,
+           webcam=False):
+    # Initialize
     device = torch_utils.select_device()
-    print("Using device: \"{}\"".format(device))
+    torch.backends.cudnn.benchmark = False  # set False for reproducible results
+    if os.path.exists(output):
+        shutil.rmtree(output)  # delete output folder
+    os.makedirs(output)  # make new output folder
 
-    os.system('rm -rf ' + output)
-    os.makedirs(output, exist_ok=True)
+    # Initialize model
+    if ONNX_EXPORT:
+        s = (320, 192)  # (320, 192) or (416, 256) or (608, 352) onnx model image size (height, width)
+        model = Darknet(cfg, s)
+    else:
+        model = Darknet(cfg, img_size)
 
-    data_config = parse_data_config(data_config_path)
-
-    # Load model
-    model = Darknet(net_config_path, img_size)
-
-    if weights_file_path.endswith('.pt'):  # pytorch format
-        if weights_file_path.endswith('weights/yolov3.pt') and not os.path.isfile(weights_file_path):
-            os.system('wget https://storage.googleapis.com/ultralytics/yolov3.pt -O ' + weights_file_path)
-        checkpoint = torch.load(weights_file_path, map_location='cpu')
-        model.load_state_dict(checkpoint['model'])
-        del checkpoint
+    # Load weights
+    if weights.endswith('.pt'):  # pytorch format
+        model.load_state_dict(torch.load(weights, map_location=device)['model'])
     else:  # darknet format
-        load_weights(model, weights_file_path)
+        _ = load_darknet_weights(model, weights)
 
-        # current = model.state_dict()
-        # saved = checkpoint['model']
-        # # 1. filter out unnecessary keys
-        # saved = {k: v for k, v in saved.items() if ((k in current) and (current[k].shape == v.shape))}
-        # # 2. overwrite entries in the existing state dict
-        # current.update(saved)
-        # # 3. load the new state dict
-        # model.load_state_dict(current)
-        # model.to(device).eval()
-        # del checkpoint, current, saved
+    # Fuse Conv2d + BatchNorm2d layers
+    model.fuse()
 
+    # Eval mode
     model.to(device).eval()
 
-    # Set Dataloader
-    classes = load_classes(data_config['names'])  # Extracts class labels from file
-    dataloader = load_images(images_path, batch_size=batch_size, img_size=img_size)
-
-    imgs = []  # Stores image paths
-    img_detections = []  # Stores detections for each image index
-    prev_time = time.time()
-    for i, (img_paths, img) in enumerate(dataloader):
-        print('%g/%g' % (i + 1, len(dataloader)), end=' ')
-
-        # Get detections
-        with torch.no_grad():
-            # cv2.imwrite('zidane_416.jpg', 255 * img.transpose((1, 2, 0))[:, :, ::-1])  # letterboxed
-            img = torch.from_numpy(img).unsqueeze(0).to(device)
-            if ONNX_EXPORT:
-                pred = torch.onnx._export(model, img, 'weights/model.onnx', verbose=True);
-                return  # ONNX export
-            pred = model(img)
-            pred = pred[pred[:, :, 4] > conf_thres]
-
-            if len(pred) > 0:
-                detections = non_max_suppression(pred.unsqueeze(0), conf_thres, nms_thres)
-                img_detections.extend(detections)
-                imgs.extend(img_paths)
-
-        print('Batch %d... Done. (%.3fs)' % (i, time.time() - prev_time))
-        prev_time = time.time()
-
-    # Bounding-box colors
-    color_list = [[random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)] for _ in range(len(classes))]
-
-    if len(img_detections) == 0:
+    if ONNX_EXPORT:
+        img = torch.zeros((1, 3, s[0], s[1]))
+        torch.onnx.export(model, img, 'weights/export.onnx', verbose=True)
         return
 
-    # Iterate through images and save plot of detections
-    for img_i, (path, detections) in enumerate(zip(imgs, img_detections)):
-        print("image %g: '%s'" % (img_i, path))
+    # Set Dataloader
+    vid_path, vid_writer = None, None
+    if webcam:
+        save_images = False
+        dataloader = LoadWebcam(img_size=img_size)
+    else:
+        dataloader = LoadImages(images, img_size=img_size)
 
-        # Draw bounding boxes and labels of detections
-        if detections is not None:
-            img = cv2.imread(path)
+    # Get classes and colors
+    classes = load_classes(parse_data_cfg(data_cfg)['names'])
+    colors = [[random.randint(0, 255) for _ in range(3)] for _ in range(len(classes))]
 
-            # The amount of padding that was added
-            pad_x = max(img.shape[0] - img.shape[1], 0) * (img_size / max(img.shape))
-            pad_y = max(img.shape[1] - img.shape[0], 0) * (img_size / max(img.shape))
-            # Image height and width after padding is removed
-            unpad_h = img_size - pad_y
-            unpad_w = img_size - pad_x
+    for i, (path, img, im0, vid_cap) in enumerate(dataloader):
+        t = time.time()
+        save_path = str(Path(output) / Path(path).name)
 
-            unique_classes = detections[:, -1].cpu().unique()
-            bbox_colors = random.sample(color_list, len(unique_classes))
+        # Get detections
+        img = torch.from_numpy(img).unsqueeze(0).to(device)
+        pred, _ = model(img)
+        det = non_max_suppression(pred, conf_thres, nms_thres)[0]
 
-            # write results to .txt file
-            results_img_path = os.path.join(output, path.split('/')[-1])
-            results_txt_path = results_img_path + '.txt'
-            if os.path.isfile(results_txt_path):
-                os.remove(results_txt_path)
+        if det is not None and len(det) > 0:
+            # Rescale boxes from 416 to true image size
+            det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
 
-            for i in unique_classes:
-                n = (detections[:, -1].cpu() == i).sum()
-                print('%g %ss' % (n, classes[int(i)]))
+            # Print results to screen
+            print('%gx%g ' % img.shape[2:], end='')  # print image size
+            for c in det[:, -1].unique():
+                n = (det[:, -1] == c).sum()
+                print('%g %ss' % (n, classes[int(c)]), end=', ')
 
-            for x1, y1, x2, y2, conf, cls_conf, cls_pred in detections:
-                # Rescale coordinates to original dimensions
-                box_h = ((y2 - y1) / unpad_h) * img.shape[0]
-                box_w = ((x2 - x1) / unpad_w) * img.shape[1]
-                y1 = (((y1 - pad_y // 2) / unpad_h) * img.shape[0]).round().item()
-                x1 = (((x1 - pad_x // 2) / unpad_w) * img.shape[1]).round().item()
-                x2 = (x1 + box_w).round().item()
-                y2 = (y1 + box_h).round().item()
-                x1, y1, x2, y2 = max(x1, 0), max(y1, 0), max(x2, 0), max(y2, 0)
+            # Draw bounding boxes and labels of detections
+            for *xyxy, conf, cls_conf, cls in det:
+                if save_txt:  # Write to file
+                    with open(save_path + '.txt', 'a') as file:
+                        file.write(('%g ' * 6 + '\n') % (*xyxy, cls, conf))
 
-                # write to file
-                if save_txt:
-                    with open(results_txt_path, 'a') as file:
-                        file.write(('%g %g %g %g %g %g \n') % (x1, y1, x2, y2, cls_pred, cls_conf * conf))
+                # Add bbox to the image
+                label = '%s %.2f' % (classes[int(cls)], conf)
+                plot_one_box(xyxy, im0, label=label, color=colors[int(cls)])
 
-                if save_images:
-                    # Add the bbox to the plot
-                    label = '%s %.2f' % (classes[int(cls_pred)], conf)
-                    color = bbox_colors[int(np.where(unique_classes == int(cls_pred))[0])]
-                    plot_one_box([x1, y1, x2, y2], img, label=label, color=color)
+        print('Done. (%.3fs)' % (time.time() - t))
 
-            if save_images:
-                # Save generated image with detections
-                cv2.imwrite(results_img_path.replace('.bmp', '.jpg').replace('.tif', '.jpg'), img)
+        if webcam:  # Show live webcam
+            cv2.imshow(weights, im0)
 
-    if platform == 'darwin':  # MacOS (local)
-        os.system('open ' + output)
+        if save_images:  # Save image with detections
+            if dataloader.mode == 'images':
+                cv2.imwrite(save_path, im0)
+            else:
+                if vid_path != save_path:  # new video
+                    vid_path = save_path
+                    if isinstance(vid_writer, cv2.VideoWriter):
+                        vid_writer.release()  # release previous video writer
+
+                    fps = vid_cap.get(cv2.CAP_PROP_FPS)
+                    width = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                    height = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                    vid_writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*fourcc), fps, (width, height))
+                vid_writer.write(im0)
+
+    if save_images:
+        print('Results saved to %s' % os.getcwd() + os.sep + output)
+        if platform == 'darwin':  # macos
+            os.system('open ' + output + ' ' + save_path)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    # Get data configuration
-
-    parser.add_argument('--image-folder', type=str, default='data/samples', help='path to images')
-    parser.add_argument('--output-folder', type=str, default='output', help='path to outputs')
-    parser.add_argument('--plot-flag', type=bool, default=True)
-    parser.add_argument('--txt-out', type=bool, default=False)
-    parser.add_argument('--cfg', type=str, default='cfg/yolov3.cfg', help='cfg file path')
-    parser.add_argument('--data-config', type=str, default='cfg/coco.data', help='path to data config file')
-    parser.add_argument('--weights', type=str, default='weights/yolov3.pt', help='path to weights file')
-    parser.add_argument('--conf-thres', type=float, default=0.50, help='object confidence threshold')
-    parser.add_argument('--nms-thres', type=float, default=0.45, help='iou threshold for non-maximum suppression')
-    parser.add_argument('--batch-size', type=int, default=1, help='size of the batches')
-    parser.add_argument('--img-size', type=int, default=32 * 13, help='size of each image dimension')
+    parser.add_argument('--cfg', type=str, default='cfg/yolov3-spp.cfg', help='cfg file path')
+    parser.add_argument('--data-cfg', type=str, default='data/coco.data', help='coco.data file path')
+    parser.add_argument('--weights', type=str, default='weights/yolov3-spp.weights', help='path to weights file')
+    parser.add_argument('--images', type=str, default='data/samples', help='path to images')
+    parser.add_argument('--img-size', type=int, default=416, help='inference size (pixels)')
+    parser.add_argument('--conf-thres', type=float, default=0.5, help='object confidence threshold')
+    parser.add_argument('--nms-thres', type=float, default=0.5, help='iou threshold for non-maximum suppression')
+    parser.add_argument('--fourcc', type=str, default='mp4v', help='fourcc output video codec (verify ffmpeg support)')
+    parser.add_argument('--output', type=str, default='output', help='specifies the output path for images and videos')
     opt = parser.parse_args()
     print(opt)
 
-    torch.cuda.empty_cache()
-
-    init_seeds()
-
-    detect(
-        opt.cfg,
-        opt.data_config,
-        opt.weights,
-        opt.image_folder,
-        output=opt.output_folder,
-        batch_size=opt.batch_size,
-        img_size=opt.img_size,
-        conf_thres=opt.conf_thres,
-        nms_thres=opt.nms_thres,
-        save_txt=opt.txt_out,
-        save_images=opt.plot_flag,
-    )
+    with torch.no_grad():
+        detect(opt.cfg,
+               opt.data_cfg,
+               opt.weights,
+               images=opt.images,
+               img_size=opt.img_size,
+               conf_thres=opt.conf_thres,
+               nms_thres=opt.nms_thres,
+               fourcc=opt.fourcc,
+               output=opt.output)
