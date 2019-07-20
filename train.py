@@ -264,7 +264,7 @@ def train(cfg,
 
         # Calculate mAP (always test final epoch, skip first 5 if opt.nosave)
         # 计算mAP(始终测试最后一个时期，如果opt.nosave，跳过第一个5)
-        if not (opt.notest or (opt.nosave and epoch < 10)) or epoch == epochs - 1:
+        if not (opt.notest or (opt.nosave and epoch < 10)) or (epoch == epochs - 1):
             with torch.no_grad():
                 results, maps = test.test(cfg, data_cfg, batch_size=batch_size, img_size=opt.img_size, model=model,
                                           conf_thres=0.1)
