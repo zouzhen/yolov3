@@ -28,6 +28,7 @@ def train(
         freeze_backbone=True,
         var=0,
 ):
+    # 选定GPU
     device = torch_utils.select_device()
     print("Using device: \"{}\"".format(device))
 
@@ -49,8 +50,7 @@ def train(
     model = Darknet(net_config_path, img_size)
 
     # Get dataloader
-    dataloader = load_images_and_labels(train_path, batch_size=batch_size, img_size=img_size,
-                                        multi_scale=multi_scale, augment=True)
+    dataloader = load_images_and_labels(train_path, batch_size=batch_size, img_size=img_size, multi_scale=multi_scale, augment=True)
 
     lr0 = 0.001
     if resume:
@@ -91,8 +91,8 @@ def train(
         assert os.path.isfile(def_weight_file)
         load_weights(model, def_weight_file)
 
-        if torch.cuda.device_count() > 1:
-            raise Exception('Multi-GPU not currently supported: https://github.com/ultralytics/yolov3/issues/21')
+        # if torch.cuda.device_count() > 1:
+        #     raise Exception('Multi-GPU not currently supported: https://github.com/ultralytics/yolov3/issues/21')
             # print('Using ', torch.cuda.device_count(), ' GPUs')
             # model = nn.DataParallel(model)
         model.to(device).train()
