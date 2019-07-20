@@ -279,7 +279,8 @@ def train(cfg,
             best_fitness = fitness
 
         # Save training results
-        save = (not opt.nosave) or ((not opt.evolve) and (epoch == epochs - 1))
+        # save = (not opt.nosave) or ((not opt.evolve) and (epoch == epochs - 1))
+        save = (not opt.nosave) or ((not opt.evolve) and (epoch % 100 == 0))
         if save:
             with open('results.txt', 'r') as file:
                 # Create checkpoint

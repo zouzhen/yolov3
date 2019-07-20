@@ -8,7 +8,7 @@ voc_clses = ['aeroplane', 'bicycle', 'bird', 'boat',
     'bottle', 'bus', 'car', 'cat', 'chair',
     'cow', 'diningtable', 'dog', 'horse',
     'motorbike', 'person', 'pottedplant',
-    'sheep', 'sofa', 'train', 'tvmonitor']
+    'sheep', 'sofa', 'train', 'tvmonitor','Nonstandard','Standard']
 
 
 categories = []
@@ -78,21 +78,23 @@ def txt2list(txtfile):
     f = open(txtfile)
     l = []
     for line in f:
-        l.append(line[:-1])
+        l.append(os.path.splitext(os.path.basename(line))[0])
+    print(l[0])
     return l
 
 
 # voc2007xmls = 'anns'
-voc2007xmls = '/data2/chenjia/data/VOCdevkit/VOC2007/Annotations'
+voc2007xmls = '/home/jdhl/darknet/scripts/VOCdevkit/VOC2007/Annotations'
 # test_txt = 'voc2007/test.txt'
-test_txt = '/data2/chenjia/data/VOCdevkit/VOC2007/ImageSets/Main/test.txt'
+test_txt = '/home/jdhl/darknet/scripts/2007_train.txt'
 xml_names = txt2list(test_txt)
 xmls = []
 bboxes = []
 ann_js = {}
 for ind, xml_name in enumerate(xml_names):
+    print(xml_name)
     xmls.append(os.path.join(voc2007xmls, xml_name + '.xml'))
-json_name = 'annotations/instances_voc2007val.json'
+json_name = '/home/jdhl/darknet/scripts/VOCdevkit_副本/json/instances_voc2007val.json'
 images = []
 for i_index, xml_file in enumerate(xmls):
     image, sig_xml_bbox = getimages(xml_file, i_index)
@@ -101,6 +103,7 @@ for i_index, xml_file in enumerate(xmls):
 ann_js['images'] = images
 ann_js['categories'] = categories
 annotations = []
+print('开始写入')
 for box_ind, box in enumerate(bboxes):
     anno = {}
     anno['image_id'] =  box[-3]
