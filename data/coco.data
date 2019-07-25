@@ -1,4 +1,4 @@
-classes=80
+classes=22
 train=../coco/trainvalno5k.txt
 valid=../coco/5k.txt
 names=data/coco.names

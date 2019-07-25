@@ -212,6 +212,7 @@ def train(cfg,
         mloss = torch.zeros(5).to(device)  # mean losses
         pbar = tqdm(enumerate(dataloader), total=nb)  # progress bar
         for i, (imgs, targets, paths, _) in pbar:
+            print('paths:',paths)
             imgs = imgs.to(device)
             targets = targets.to(device)
 
@@ -280,7 +281,7 @@ def train(cfg,
 
         # Save training results
         # save = (not opt.nosave) or ((not opt.evolve) and (epoch == epochs - 1))
-        save = (not opt.nosave) or ((not opt.evolve) and (epoch % 100 == 0))
+        save = (not opt.nosave) or ((not opt.evolve) and (epoch % 300 == 0))
         if save:
             with open('results.txt', 'r') as file:
                 # Create checkpoint

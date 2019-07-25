@@ -247,3 +247,4 @@ train_batch0.jpg
 # post.py
 weights/yolov3.weights
 weights/darknet53.conv.74
+weights/*.pt
