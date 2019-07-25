@@ -171,8 +171,11 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         self.rect = False if image_weights else rect
 
         # Define labels
-        self.label_files = [x.replace('images', 'labels').replace(os.path.splitext(x)[-1], '.txt')
-                            for x in self.img_files]
+        # self.label_files = [x.replace('images', 'labels').replace(os.path.splitext(x)[-1], '.txt')
+        #                     for x in self.img_files]
+
+        self.label_files = [x.replace('JPEGImages', 'labels').replace(os.path.splitext(x)[-1], '.txt')
+                    for x in self.img_files]
 
         # Rectangular Training  https://github.com/ultralytics/yolov3/issues/232
         if self.rect:

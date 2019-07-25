@@ -223,6 +223,7 @@ cmake-build-release/
 
 # IntelliJ
 out/
+output/
 
 # mpeltonen/sbt-idea plugin
 .idea_modules/
