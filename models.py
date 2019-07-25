@@ -34,6 +34,7 @@ def create_modules(module_defs):
             if bn:
                 modules.add_module('batch_norm_%d' % i, nn.BatchNorm2d(filters))
             if module_def['activation'] == 'leaky':
+                # modules.add_module('leaky_%d' % i, nn.PReLU(num_parameters=filters, init=0.10))
                 modules.add_module('leaky_%d' % i, nn.LeakyReLU(0.1, inplace=True))
 
         elif module_def['type'] == 'maxpool':
@@ -252,7 +253,7 @@ def load_darknet_weights(self, weights, cutoff=-1):
     if not os.path.isfile(weights):
         try:
             url = 'https://pjreddie.com/media/files/' + weights_file
-            print('Downloading ' + url + ' to ' + weights)
+            print('Downloading ' + url)
             os.system('curl ' + url + ' -o ' + weights)
         except IOError:
             print(weights + ' not found.\nTry https://drive.google.com/drive/folders/1uxgUBemJVw9wZsdpboYbzUN4bcRhsuAI')

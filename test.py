@@ -9,7 +9,7 @@ from utils.utils import *
 
 
 def test(cfg,
-         data_cfg,
+         data,
          weights=None,
          batch_size=16,
          img_size=416,
@@ -21,6 +21,7 @@ def test(cfg,
     # Initialize/load model and set device
     if model is None:
         device = torch_utils.select_device()
+        verbose = True
 
         # Initialize model
         model = Darknet(cfg, img_size).to(device)
@@ -35,12 +36,13 @@ def test(cfg,
             model = nn.DataParallel(model)
     else:
         device = next(model.parameters()).device  # get model device
+        verbose = False
 
     # Configure run
-    data_cfg = parse_data_cfg(data_cfg)
-    nc = int(data_cfg['classes'])  # number of classes
-    test_path = data_cfg['valid']  # path to test images
-    names = load_classes(data_cfg['names'])  # class names
+    data = parse_data_cfg(data)
+    nc = int(data['classes'])  # number of classes
+    test_path = data['valid']  # path to test images
+    names = load_classes(data['names'])  # class names
 
     # Dataloader
     dataset = LoadImagesAndLabels(test_path, img_size, batch_size)
@@ -87,9 +89,6 @@ def test(cfg,
                     stats.append(([], torch.Tensor(), torch.Tensor(), tcls))
                 continue
 
-            # Clip boxes to image bounds
-            clip_coords(pred, (height, width))
-
             # Append to text file
             # with open('test.txt', 'a') as file:
             #    [file.write('%11.5g' * 7 % tuple(x) + '\n') for x in pred]
@@ -105,8 +104,11 @@ def test(cfg,
                 for di, d in enumerate(pred):
                     jdict.append({'image_id': image_id,
                                   'category_id': coco91class[int(d[6])],
-                                  'bbox': [float3(x) for x in box[di]],
-                                  'score': float(d[4])})
+                                  'bbox': [floatn(x, 3) for x in box[di]],
+                                  'score': floatn(d[4], 5)})
+
+            # Clip boxes to image bounds
+            clip_coords(pred, (height, width))
 
             # Assign all predictions as incorrect
             correct = [0] * len(pred)
@@ -156,7 +158,7 @@ def test(cfg,
     print(pf % ('all', seen, nt.sum(), mp, mr, map, mf1))
 
     # Print results per class
-    if nc > 1 and len(stats):
+    if verbose and nc > 1 and len(stats):
         for i, c in enumerate(ap_class):
             print(pf % (names[c], seen, nt[c], p[i], r[i], ap[i], f1[i]))
 
@@ -191,7 +193,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='test.py')
     parser.add_argument('--batch-size', type=int, default=16, help='size of each image batch')
     parser.add_argument('--cfg', type=str, default='cfg/yolov3-spp.cfg', help='cfg file path')
-    parser.add_argument('--data-cfg', type=str, default='data/coco.data', help='coco.data file path')
+    parser.add_argument('--data', type=str, default='data/coco.data', help='coco.data file path')
     parser.add_argument('--weights', type=str, default='weights/yolov3-spp.weights', help='path to weights file')
     parser.add_argument('--iou-thres', type=float, default=0.5, help='iou threshold required to qualify as detected')
     parser.add_argument('--conf-thres', type=float, default=0.001, help='object confidence threshold')
@@ -203,7 +205,7 @@ if __name__ == '__main__':
 
     with torch.no_grad():
         mAP = test(opt.cfg,
-                   opt.data_cfg,
+                   opt.data,
                    opt.weights,
                    opt.batch_size,
                    opt.img_size,
