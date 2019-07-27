@@ -38,7 +38,7 @@ def write_image2txt_split(images_path, out_path, ratio):
 
 if __name__ == "__main__":
     img_path = 'data/VOCdevkit/VOC2012/JPEGImages'
-    set_path = 'data/VOCdevkit/VOC2012/ImageSets'
+    set_path = 'data/VOCdevkit/VOC2012/ImageSets/Main'
     if not os.path.exists(set_path):
         os.makedirs(set_path)
     write_image2txt(img_path,set_path)
