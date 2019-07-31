@@ -5,7 +5,7 @@
     </td>
     <td align="center">
     <a href="https://www.ultralytics.com" target="_blank">
-    <img src="https://storage.googleapis.com/ultralytics/logo/logoname1000.png" width="200"></a>
+    <img src="https://storage.googleapis.com/ultralytics/logo/logoname1000.png" width="160"></a>
       <img src="https://user-images.githubusercontent.com/26833433/61591093-2b4d4480-abc2-11e9-8b46-d88eb1dabba1.jpg">
           <a href="https://itunes.apple.com/app/id1452689527" target="_blank">
     <img src="https://user-images.githubusercontent.com/26833433/50044365-9b22ac00-0082-11e9-862f-e77aee7aa7b0.png" width="180"></a>
@@ -79,18 +79,19 @@ HS**V** Intensity | +/- 50%
 https://cloud.google.com/deep-learning-vm/  
 **Machine type:** n1-standard-8 (8 vCPUs, 30 GB memory)  
 **CPU platform:** Intel Skylake  
-**GPUs:** K80 ($0.20/hr), T4 ($0.35/hr), V100 ($0.80/hr) CUDA with Nvidia Apex FP16/32 
+**GPUs:** K80 ($0.20/hr), T4 ($0.35/hr), V100 ($0.80/hr) CUDA with [Nvidia Apex](https://github.com/NVIDIA/apex) FP16/32  
 **HDD:** 100 GB SSD  
 **Dataset:** COCO train 2014 (117,263 images)
 
 GPUs | `batch_size` | batch time | epoch time | epoch cost
 --- |---| --- | --- | --- 
-1 K80 | 64 (32x2) | 2.9s  | 175min  | $0.58
-1 T4 | 64 (32x2) | 0.80s  | 49min  | $0.29
-2 T4 | 64 (64x1) | 0.52s  | 32min  | $0.36
-1 2080ti | 64 (32x2) | -  | -  | -
-1 V100 | 64 (32x2) | 0.38s | 23min | $0.31
-2 V100 | 64 (64x1) | 0.30s | 18min | $0.46
+K80 | 64 (32x2) | 2.90 s  | 175 min  | $0.58
+T4 | 64 (32x2) | 0.80 s  | 49 min  | $0.29
+T4 x2 | 64 (64x1) | 0.52 s  | 32 min  | $0.36
+V100 | 64 (32x2) | 0.38 s | 23 min | $0.31
+V100 x2 | 64 (64x1) | 0.30 s | 18 min | $0.46
+2080Ti | 64 (32x2) | 0.46 s  | 28 min  | - 
+
 
 # Inference
 

@@ -40,9 +40,10 @@ def exif_size(img):
 
 class LoadImages:  # for inference
     def __init__(self, path, img_size=416):
+        path = str(Path(path))  # os-agnostic
         files = []
         if os.path.isdir(path):
-            files = sorted(glob.glob('%s/*.*' % path))
+            files = sorted(glob.glob(os.path.join(path, '*.*')))
         elif os.path.isfile(path):
             files = [path]
 
@@ -154,8 +155,10 @@ class LoadWebcam:  # for inference
 
 class LoadImagesAndLabels(Dataset):  # for training/testing
     def __init__(self, path, img_size=416, batch_size=16, augment=False, hyp=None, rect=False, image_weights=False):
+        path = str(Path(path))  # os-agnostic
         with open(path, 'r') as f:
-            self.img_files = [x for x in f.read().splitlines() if os.path.splitext(x)[-1].lower() in img_formats]
+            self.img_files = [x.replace('/', os.sep) for x in f.read().splitlines()  # os-agnostic
+                              if os.path.splitext(x)[-1].lower() in img_formats]
 
         n = len(self.img_files)
         bi = np.floor(np.arange(n) / batch_size).astype(np.int)  # batch index
@@ -210,11 +213,10 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         self.imgs = [None] * n
         self.labels = [None] * n
         preload_labels = False
-        if preload_labels:
+        if preload_labels or image_weights:
             self.labels = [np.zeros((0, 5))] * n
-            iter = tqdm(self.label_files, desc='Reading labels') if n > 10 else self.label_files
             extract_bounding_boxes = False
-            for i, file in enumerate(iter):
+            for i, file in enumerate(tqdm(self.label_files, desc='Reading labels') if n > 10 else self.label_files):
                 try:
                     with open(file, 'r') as f:
                         l = np.array([x.split() for x in f.read().splitlines()], dtype=np.float32)
