@@ -7,7 +7,7 @@ import xml.etree.ElementTree as ET
 sets=[ ('2012', 'train'), ('2012', 'val')]
 
 #classes = ["withHelmet","noHelmet"]
-classes = ["Standard","Nonstandard"]
+classes = ["Standard","Nonstandard","withHelmet","noHelmet"]
 
 def convert(size, box):
     dw = 1./(size[0])
@@ -53,6 +53,6 @@ if __name__ == "__main__":
         image_ids = open('data/VOCdevkit/VOC%s/ImageSets/Main/%s.txt'%(year, image_set)).read().strip().split()
         list_file = open('data/VOCdevkit/VOC%s/%s_%s.txt'%(year,year, image_set), 'w+')
         for image_id in image_ids:
-            list_file.write('%s/VOCdevkit/VOC%s/JPEGImages/%s.jpg\n'%(wd, year, image_id))
+            list_file.write('%s/data/VOCdevkit/VOC%s/JPEGImages/%s.jpg\n'%(wd, year, image_id))
             convert_annotation(year, image_id)
         list_file.close()
