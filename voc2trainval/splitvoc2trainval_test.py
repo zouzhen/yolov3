@@ -42,6 +42,6 @@ if __name__ == "__main__":
     if not os.path.exists(set_path):
         os.makedirs(set_path)
     write_image2txt(img_path,set_path)
-    write_image2txt_split(img_path,set_path,0.1)
+    write_image2txt_split(img_path,set_path,0.9)
     # os.system("cat VOC_train.txt VOC_val.txt  > train.txt")
     # os.system("cat VOC_train.txt VOC_val.txt VOC_test.txt  > train.all.txt")
