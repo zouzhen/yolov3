@@ -6,23 +6,35 @@ import xml.etree.ElementTree as ET
 
 sets=[ ('2012', 'train'), ('2012', 'val')]
 
-#classes = ["withHelmet","noHelmet"]
+# classes = ["withHelmet","noHelmet"]
+# classes = ["Sunburn"]
+classes = [ "TargetNodePump",
+            "TargetNodeManualValve",
+            "TargetNodeManualclassValve",
+            "TargetNodeElectricValve",
+            "TargetNodeElectricclassValve",
+            "TargetNodePressureSensor",
+            "TargetNodeBoundary",
+            "RelationalNodeAclass",
+            "RelationalNodeBclass",
+            "RelationalNodeCclass",
+            "RelationalNodeDclass"]
 # classes = ["Standard","Nonstandard","withHelmet","noHelmet"]
-classes = ['Meter',
-        'SwitchOne',
-        'SwitchTwo',
-        'SwitchThree',
-        'SwitchFour',
-        'SwitchFive',
-        'SwitchSix',
-        'SwitchSeven',
-        'SwitchEight',
-        'LightYOff',
-        'LightYOn',
-        'LightRectangleOff',
-        'LightRectangleOn',
-        'LightCircleOff',
-        'LightCircleOn']
+# classes = ['Meter',
+#         'SwitchOne',
+#         'SwitchTwo',
+#         'SwitchThree',
+#         'SwitchFour',
+#         'SwitchFive',
+#         'SwitchSix',
+#         'SwitchSeven',
+#         'SwitchEight',
+#         'LightYOff',
+#         'LightYOn',
+#         'LightRectangleOff',
+#         'LightRectangleOn',
+#         'LightCircleOff',
+#         'LightCircleOn']
 
 def convert(size, box):
     dw = 1./(size[0])
