@@ -20,13 +20,14 @@ def test(cfg,
          model=None):
     # Initialize/load model and set device
     if model is None:
-        device = torch_utils.select_device()
+        device = torch_utils.select_device(opt.device)
         verbose = True
 
         # Initialize model
         model = Darknet(cfg, img_size).to(device)
 
         # Load weights
+        attempt_download(weights)
         if weights.endswith('.pt'):  # pytorch format
             model.load_state_dict(torch.load(weights, map_location=device)['model'])
         else:  # darknet format
@@ -48,15 +49,16 @@ def test(cfg,
     dataset = LoadImagesAndLabels(test_path, img_size, batch_size)
     dataloader = DataLoader(dataset,
                             batch_size=batch_size,
-                            num_workers=4,
+                            num_workers=min([os.cpu_count(), batch_size, 16]),
                             pin_memory=True,
                             collate_fn=dataset.collate_fn)
 
     seen = 0
     model.eval()
     coco91class = coco80_to_coco91_class()
-    s = ('%30s' + '%10s' * 6) % ('Class', 'Images', 'Targets', 'P', 'R', 'mAP', 'F1')
-    loss, p, r, f1, mp, mr, map, mf1 = 0., 0., 0., 0., 0., 0., 0., 0.
+    s = ('%20s' + '%10s' * 6) % ('Class', 'Images', 'Targets', 'P', 'R', 'mAP', 'F1')
+    p, r, f1, mp, mr, map, mf1 = 0., 0., 0., 0., 0., 0., 0.
+    loss = torch.zeros(3)
     jdict, stats, ap, ap_class = [], [], [], []
     for batch_i, (imgs, targets, paths, shapes) in enumerate(tqdm(dataloader, desc=s)):
         targets = targets.to(device)
@@ -72,7 +74,7 @@ def test(cfg,
 
         # Compute loss
         if hasattr(model, 'hyp'):  # if model has loss hyperparameters
-            loss += compute_loss(train_out, targets, model)[0].item()
+            loss += compute_loss(train_out, targets, model)[1][:3].cpu()  # GIoU, obj, cls
 
         # Run NMS
         output = non_max_suppression(inf_out, conf_thres=conf_thres, nms_thres=nms_thres)
@@ -154,7 +156,7 @@ def test(cfg,
         nt = torch.zeros(1)
 
     # Print results
-    pf = '%30s' + '%10.3g' * 6  # print format
+    pf = '%20s' + '%10.3g' * 6  # print format
     print(pf % ('all', seen, nt.sum(), mp, mr, map, mf1))
 
     # Print results per class
@@ -164,52 +166,56 @@ def test(cfg,
 
     # Save JSON
     if save_json and map and len(jdict):
-        imgIds = [int(Path(x).stem.split('_')[-1]) for x in dataset.img_files]
-        with open('results.json', 'w') as file:
-            json.dump(jdict, file)
+        try:
+            imgIds = [int(Path(x).stem.split('_')[-1]) for x in dataset.img_files]
+            with open('results.json', 'w') as file:
+                json.dump(jdict, file)
 
-        from pycocotools.coco import COCO
-        from pycocotools.cocoeval import COCOeval
+            from pycocotools.coco import COCO
+            from pycocotools.cocoeval import COCOeval
 
-        # https://github.com/cocodataset/cocoapi/blob/master/PythonAPI/pycocoEvalDemo.ipynb
-        cocoGt = COCO('../coco/annotations/instances_val2014.json')  # initialize COCO ground truth api
-        cocoDt = cocoGt.loadRes('results.json')  # initialize COCO pred api
+            # https://github.com/cocodataset/cocoapi/blob/master/PythonAPI/pycocoEvalDemo.ipynb
+            cocoGt = COCO('../coco/annotations/instances_val2014.json')  # initialize COCO ground truth api
+            cocoDt = cocoGt.loadRes('results.json')  # initialize COCO pred api
 
-        cocoEval = COCOeval(cocoGt, cocoDt, 'bbox')
-        cocoEval.params.imgIds = imgIds  # [:32]  # only evaluate these images
-        cocoEval.evaluate()
-        cocoEval.accumulate()
-        cocoEval.summarize()
-        map = cocoEval.stats[1]  # update mAP to pycocotools mAP
+            cocoEval = COCOeval(cocoGt, cocoDt, 'bbox')
+            cocoEval.params.imgIds = imgIds  # [:32]  # only evaluate these images
+            cocoEval.evaluate()
+            cocoEval.accumulate()
+            cocoEval.summarize()
+            map = cocoEval.stats[1]  # update mAP to pycocotools mAP
+        except:
+            print('WARNING: missing dependency pycocotools from requirements.txt. Can not compute official COCO mAP.')
 
     # Return results
     maps = np.zeros(nc) + map
     for i, c in enumerate(ap_class):
         maps[c] = ap[i]
-    return (mp, mr, map, mf1, loss / len(dataloader)), maps
+    return (mp, mr, map, mf1, *(loss / len(dataloader)).tolist()), maps
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='test.py')
-    parser.add_argument('--batch-size', type=int, default=16, help='size of each image batch')
     parser.add_argument('--cfg', type=str, default='cfg/yolov3-spp.cfg', help='cfg file path')
     parser.add_argument('--data', type=str, default='data/coco.data', help='coco.data file path')
     parser.add_argument('--weights', type=str, default='weights/yolov3-spp.weights', help='path to weights file')
+    parser.add_argument('--batch-size', type=int, default=16, help='size of each image batch')
+    parser.add_argument('--img-size', type=int, default=416, help='inference size (pixels)')
     parser.add_argument('--iou-thres', type=float, default=0.5, help='iou threshold required to qualify as detected')
     parser.add_argument('--conf-thres', type=float, default=0.001, help='object confidence threshold')
     parser.add_argument('--nms-thres', type=float, default=0.5, help='iou threshold for non-maximum suppression')
     parser.add_argument('--save-json', action='store_true', help='save a cocoapi-compatible JSON results file')
-    parser.add_argument('--img-size', type=int, default=416, help='inference size (pixels)')
+    parser.add_argument('--device', default='', help='device id (i.e. 0 or 0,1) or cpu')
     opt = parser.parse_args()
     print(opt)
 
     with torch.no_grad():
-        mAP = test(opt.cfg,
-                   opt.data,
-                   opt.weights,
-                   opt.batch_size,
-                   opt.img_size,
-                   opt.iou_thres,
-                   opt.conf_thres,
-                   opt.nms_thres,
-                   opt.save_json)
+        test(opt.cfg,
+             opt.data,
+             opt.weights,
+             opt.batch_size,
+             opt.img_size,
+             opt.iou_thres,
+             opt.conf_thres,
+             opt.nms_thres,
+             opt.save_json)

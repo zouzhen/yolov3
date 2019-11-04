@@ -1,20 +1,21 @@
 #!/usr/bin/env bash
 
 # New VM
-rm -rf yolov3 weights coco
+rm -rf sample_data yolov3 darknet apex coco cocoapi knife knifec
 git clone https://github.com/ultralytics/yolov3
-# git clone https://github.com/cocodataset/cocoapi && cd cocoapi/PythonAPI && make && cd ../.. && cp -r cocoapi/PythonAPI/pycocotools yolov3
-git clone https://github.com/NVIDIA/apex && cd apex && pip install -v --no-cache-dir --global-option="--cpp_ext" --global-option="--cuda_ext" . --user && cd ..  && rm -rf apex
-bash yolov3/weights/download_yolov3_weights.sh && cp -r weights yolov3
-bash yolov3/data/get_coco_dataset_gdrive.sh
+# git clone https://github.com/AlexeyAB/darknet && cd darknet && make GPU=1 CUDNN=1 CUDNN_HALF=1 OPENCV=0 && wget -c https://pjreddie.com/media/files/darknet53.conv.74 && cd ..
+git clone https://github.com/NVIDIA/apex && cd apex && pip install -v --no-cache-dir --global-option="--cpp_ext" --global-option="--cuda_ext" . --user && cd .. && rm -rf apex
+sudo conda install -y -c conda-forge scikit-image tensorboard pycocotools
+python3 -c "
+from yolov3.utils.google_utils import gdrive_download
+gdrive_download('1HaXkef9z6y5l4vUnCYgdmEAj61c6bfWO','coco.zip')"
 sudo shutdown
 
 # Re-clone
 rm -rf yolov3  # Warning: remove existing
-git clone https://github.com/ultralytics/yolov3  # master
+git clone https://github.com/ultralytics/yolov3 && cd yolov3 # master
 # git clone -b test --depth 1 https://github.com/ultralytics/yolov3 test  # branch
-cp -r cocoapi/PythonAPI/pycocotools yolov3
-cp -r weights yolov3 && cd yolov3
+python3 train.py --img-size 320 --weights weights/darknet53.conv.74 --epochs 27 --batch-size 64 --accumulate 1
 
 # Train
 python3 train.py
@@ -66,6 +67,12 @@ python3 test.py --save-json --img-size 416
 python3 test.py --save-json --img-size 320
 sudo shutdown
 
+# Benchmark script
+git clone https://github.com/ultralytics/yolov3  # clone our repo
+git clone https://github.com/NVIDIA/apex && cd apex && pip install -v --no-cache-dir --global-option="--cpp_ext" --global-option="--cuda_ext" . --user && cd .. && rm -rf apex  # install nvidia apex
+python3 -c "from yolov3.utils.google_utils import gdrive_download; gdrive_download('1HaXkef9z6y5l4vUnCYgdmEAj61c6bfWO','coco.zip')"  # download coco dataset (20GB)
+cd yolov3 && clear && python3 train.py --epochs 1  # run benchmark (~30 min)
+
 # Unit tests
 python3 detect.py  # detect 2 persons, 1 tie
 python3 test.py --data data/coco_32img.data  # test mAP = 0.8
@@ -97,6 +104,7 @@ python3 test.py --data ../supermarket2/supermarket2.data --weights weights/yolov
 python3 test.py --data ../supermarket2/supermarket2.data --weights weights/yolov3-spp-sm2-1cls-scalexy_200_5000.weights --cfg ../yolov3-spp-sm2-1cls-scalexy_200.cfg --img-size 320 --conf-thres 0.2  # test
 python3 test.py --data ../supermarket2/supermarket2.data --weights ../darknet/backup/yolov3-spp-sm2-1cls-scalexy_variable_5000.weights --cfg ../yolov3-spp-sm2-1cls-scalexy_variable.cfg --img-size 320 --conf-thres 0.2  # test
 
+python3 train.py --img-size 320 --epochs 27 --batch-size 64 --accumulate 1 --nosave --notest && python3 test.py --weights weights/last.pt --img-size 320 --save-json && sudo shutdown
 
 # Debug/Development
 python3 train.py --data data/coco.data --img-size 320 --single-scale --batch-size 64 --accumulate 1 --epochs 1 --evolve --giou
@@ -104,3 +112,17 @@ python3 test.py --weights weights/last.pt --cfg cfg/yolov3-spp.cfg --img-size 32
 
 gsutil cp evolve.txt gs://ultralytics
 sudo shutdown
+
+#Docker
+sudo docker kill $(sudo docker ps -q)
+sudo docker pull ultralytics/yolov3:v1
+sudo nvidia-docker run -it --ipc=host --mount type=bind,source="$(pwd)"/coco,target=/usr/src/coco ultralytics/yolov3:v1
+
+clear
+while true
+do
+  python3 train.py --data data/coco.data --img-size 320 --batch-size 64 --accumulate 1 --evolve --epochs 1 --adam --bucket yolov4/adamdefaultpw_coco_1e --device 1
+done
+
+python3 train.py --data data/coco.data --img-size 320 --batch-size 64 --accumulate 1 --epochs 1 --adam --device 1 --prebias
+while true; do python3 train.py --data data/coco.data --img-size 320 --batch-size 64 --accumulate 1 --evolve --epochs 1 --adam --bucket yolov4/adamdefaultpw_coco_1e; done
