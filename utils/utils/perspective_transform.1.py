@@ -29,7 +29,7 @@
 import cv2
 import numpy as np
 
-img = cv2.imread('/home/jdhl/WorkSpace/ZOUZHEN/utils/test_images/image(46).jpg')
+img = cv2.imread('/home/lzc274500/WorkSpace/ZOUZHEN/utils/test_images/11111.jpeg')
 img = cv2.pyrDown(img)
 ret, thresh = cv2.threshold(cv2.cvtColor(img.copy(), cv2.COLOR_BGR2GRAY),130, 255,cv2.THRESH_BINARY)  # 黑白二值化
 h, w = img.shape[:2]      #获取图像的高和宽 

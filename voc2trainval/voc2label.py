@@ -8,18 +8,18 @@ sets=[ ('2012', 'train'), ('2012', 'val')]
 
 # classes = ["withHelmet","noHelmet"]
 # classes = ["Sunburn"]
-classes = [ "TargetNodePump",
-            "TargetNodeManualValve",
-            "TargetNodeManualclassValve",
-            "TargetNodeElectricValve",
-            "TargetNodeElectricclassValve",
-            "TargetNodePressureSensor",
-            "TargetNodeBoundary",
-            "RelationalNodeAclass",
-            "RelationalNodeBclass",
-            "RelationalNodeCclass",
-            "RelationalNodeDclass"]
-# classes = ["Standard","Nonstandard","withHelmet","noHelmet"]
+# classes = [ "TargetNodePump",
+#             "TargetNodeManualValve",
+#             "TargetNodeManualclassValve",
+#             "TargetNodeElectricValve",
+#             "TargetNodeElectricclassValve",
+#             "TargetNodePressureSensor",
+#             "TargetNodeBoundary",
+#             "RelationalNodeAclass",
+#             "RelationalNodeBclass",
+#             "RelationalNodeCclass",
+#             "RelationalNodeDclass"]
+classes = ["RedLightOn","RedLightOff","GreenLightOn","GreenLightOff"]
 # classes = ['Meter',
 #         'SwitchOne',
 #         'SwitchTwo',

@@ -7,9 +7,15 @@ import cv2
 import os
 import copy
 import time
+import parser
+import random
 import multiprocessing
 from multiprocessing import Process, Manager
 
+letter = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','P','Q','R','S']
+num = ['2','3','4','5','6','7','8','9','0']
+
+concate = letter + num
 
 class Producer(Process):
 
@@ -33,6 +39,7 @@ class Consumer(Process):
         super().__init__()  # 加入父类init.
         self.queue = queue
         self.label = label
+        self.name = ''.join(random.sample(concate,5))
         self.args = args
 
     def stream(self, imgs_path, item, save_path):
@@ -49,8 +56,8 @@ class Consumer(Process):
         		#cv2.imwrite('D:\\01\\21' + str(c) + '.jpg', frame)  # 存储为图像
         		#cv2.imwrite('D:\\人脸识别工程\\人脸图片\\郝陪昊\\14' + '%06d' % c + '.jpg', frame)  # 存储为图像
         		frame = cv2.resize(frame, (1920,1080), interpolation=cv2.INTER_CUBIC)
-        		cv2.imwrite(save_path + '/' +'xabdz'+item.split('.')[0]+ '%08d' % c + '.jpg', frame)
-					#cv2.imwrite("C:\\Users\\liuzhichao\\Desktop\\14\\14" + '%06d' % c + '.jpg', frame)
+        		cv2.imwrite(save_path + '/' + item.split('.')[0]+ self.name + '%08d' % c + '.jpg', frame)
+        		# cv2.imwrite(save_path + '/' +self.name+item.split('.')[0]+ '%08d' % c + '.jpg', frame)
         	c = c + 1
         	#cv2.waitKey(1)
         vc.release()
@@ -64,8 +71,15 @@ class Consumer(Process):
 
 
 if __name__ == '__main__':
-	imgs_path = '/home/jdhl/WorkSpace/ZOUZHEN/dataset/8-1/7-30西安'
-	save_path = '/home/jdhl/WorkSpace/ZOUZHEN/dataset/8-1/stream'
+	# parser = argparse.ArgumentParser()
+    # parser.add_argument('--imgs-path', type=str, default=None, help='path of img')
+    # parser.add_argument('--save_path', type=str, default=None, help='path of save')
+	# opt = parser.parse_args()
+	# imgs_path = opt.imgs-path
+	# save_path = opt.save-path
+	# name = ''.join(random.sample(concate,5))
+	imgs_path = '/media/lzc274500/Elements SE/QingdaoAI/2019-11-08/output'
+	save_path = '/media/lzc274500/Elements SE/QingdaoAI/2019-11-08/JPEGImages'
 	pathlist = os.listdir(imgs_path)
 	for file in pathlist:
 		if os.path.isdir(file):

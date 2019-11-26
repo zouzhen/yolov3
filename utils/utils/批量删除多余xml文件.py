@@ -8,10 +8,10 @@ import os
 def funcname(parameter_list):
      pass
 
-files = os.listdir("/home/jdhl/darknet/scripts/VOCdevkit/VOC2007/JPEGImages")#获取当前目录下的文件
+files = os.listdir("/media/lzc274500/Elements SE/西安仪表盘演示/JPEGImages")#获取当前目录下的文件
 # filesb = os.listdir("/home/jdhl/darknet/scripts/VOCdevkit/VOC2007/result")#获取当前目录下的文件
 # files = files + filesb
-files1 = os.listdir("/home/jdhl/darknet/scripts/VOCdevkit/VOC2007/Annotations")#获取当前目录下的文件
+files1 = os.listdir("/media/lzc274500/Elements SE/西安仪表盘演示/Annotations")#获取当前目录下的文件
 # files1 = os.listdir("/home/jdhl/WorkSpace/ZOUZHEN/dataset/7-02/仪表标注数据/c_xml")#获取当前目录下的文件
 list0 = []
 #print(files1)
@@ -35,5 +35,5 @@ print('交集',len(list_merge))
 #      # os.remove(r'/media/jdhl/Elements/本安安全帽数据集/JPEGImages/'+list_merge[j])  #####删除xml文件
 # print(list0[0])
 for file in list_merge:
-     os.remove(r'/home/jdhl/darknet/scripts/VOCdevkit/VOC2007/Annotations/'+file)  #####删除xml文件
+     os.remove(r'/media/lzc274500/Elements SE/西安仪表盘演示/Annotations/'+file)  #####删除xml文件
      # os.remove(r'/media/jdhl/Elements/本安安全帽数据集/JPEGImages/'+list_merge[j])  #####删除xml文件

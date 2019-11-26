@@ -5,7 +5,6 @@
 
 import cv2
 import os
-import sys
 import copy
 import time
 import multiprocessing
@@ -31,7 +30,7 @@ class Producer(Process):
             if type(self.food) == list:
                 if len(self.food)==0:
                     print("生产者生产完毕")
-                    sys.exit()                
+                    break                
                 item = self.food.pop()  # left is closed and right is closed.
                 self.queue.put(item)
                 print("Producer-->%s" % item)
@@ -40,27 +39,22 @@ class Producer(Process):
 
 
 class Consumer(Process):
-    def __init__(self, queue, label, **args):  # 重写.
+    def __init__(self, queue, label, label_path, **args):  # 重写.
         super().__init__()  # 加入父类init.
         self.queue = queue
         self.label = label
         self.args = args
+        self.data = pd.read_csv(label_path,sep=' ',header=None,error_bad_lines=False)
 
     def horizontal_mirror_imgs(self, imgs_path, xml_path, item, save_path):
-        tree = xmlET.parse(os.path.join(xml_path, item))
+        # tree = xmlET.parse(os.path.join(imgs_path, item))
+        tree = xmlET.parse(xml_path)
         root = tree.getroot()
-
-        for obj in root.findall('object'):
-            bbox = obj.find('bndbox')
-            # Make pixel indexes 0-based
-            x1 = float(bbox.find('xmin').text)
-            x2 = float(bbox.find('xmax').text)
-            y1 = float(bbox.find('ymin').text)
-            y2 = float(bbox.find('ymax').text)
-
-            if abs(x2 - x1) < 20 or abs(y1 - y2) < 20:
-                root.remove(obj)
-        tree.write(os.path.join(save_path, item))
+        root.find('filename').text = item
+        label_str = self.data[self.data[0]==item].values
+        for index,obj in enumerate(root.findall('object')):
+            obj.find('name').text = img_label[label_str[0][1][index]]
+        tree.write(os.path.join(save_path, item.split(".")[0]+'.xml'))
 
  
 
@@ -73,12 +67,13 @@ class Consumer(Process):
 
 
 if __name__ == '__main__':
-	imgs_path = '/media/jdhl/Elements/本安安全帽数据集/JPEGImages'
-	xml_path = '/media/lzc274500/Elements SE/莱西风电数据集/11-14/dataset/Annotations'
-	save_path = '/media/lzc274500/Elements SE/莱西风电数据集/11-14/dataset/Annotations_correction'
-	pathlist = os.listdir(xml_path)
+	imgs_path = '/home/lzc274500/WorkSpace/ZOUZHEN/Pytorch/crnn_chinese_characters_rec/data/vehicle/Image'
+	xml_path = '/home/lzc274500/WorkSpace/ZOUZHEN/Pytorch/crnn_chinese_characters_rec/data_generator/data_set/PK5HD00000002.xml'
+	save_path = '/home/lzc274500/WorkSpace/ZOUZHEN/Pytorch/crnn_chinese_characters_rec/data_generator/data_set/save_path'
+	label_path = '/home/lzc274500/WorkSpace/ZOUZHEN/Pytorch/crnn_chinese_characters_rec/data_generator/data_set/train.txt'
+	pathlist = os.listdir(imgs_path)
 	# 统计计算内部的核心进程数
-	if not os.path.exists(save_path):   
+	if not os.path.exists(save_path):
 	  os.makedirs(save_path)
 	cores = multiprocessing.cpu_count()
 	qMar = Manager()
@@ -89,7 +84,7 @@ if __name__ == '__main__':
 	processes.append(p)
 	# print(int(cores/2))
 	for i in range(cores-5):
-		processes.append(Consumer(q1,i,imgs_path=imgs_path,xml_path=xml_path, save_path=save_path))
+		processes.append(Consumer(q1,i,label_path,imgs_path=imgs_path,xml_path=xml_path, save_path=save_path))
 		
 	[process.start() for process in processes]
 	[process.join() for process in processes]

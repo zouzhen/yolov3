@@ -5,17 +5,19 @@ import pandas as pd
 from datetime import datetime
 
 # 数据集的路径（PS：该文件夹中只能放图片）
-file = "/home/jdhl/WorkSpace/ZOUZHEN/dataset/8-9/xa变电站识别"
+file = "/home/lzc274500/WorkSpace/ZOUZHEN/datasets/8-26/二期返工数据"
 
 # 添加标签后的数据路径
-save_file="/home/jdhl/WorkSpace/ZOUZHEN/dataset/8-9/result"
+save_file="/home/lzc274500/WorkSpace/ZOUZHEN/datasets/8-26/返工result"
 # save_files="/home/jdhl/WorkSpace/ZOUZHEN/dataset/7-02/仪表标注数据/error_image"
 if not os.path.exists(save_file):
     os.makedirs(save_file)
-files = os.listdir(save_file)
+files = os.listdir(save_file) 
 # 标注文件路径
-label_path = "/home/jdhl/WorkSpace/ZOUZHEN/dataset/8-8/useful.txt"
-data = pd.read_csv(label_path,sep=' ',header=None)
+label_path = "/home/lzc274500/WorkSpace/ZOUZHEN/datasets/8-26/修改1963.txt"
+print('============================')
+data = pd.read_csv(label_path,sep=' ',header=None,error_bad_lines=False)
+print('============================')
 result = data.drop_duplicates([0])[0].values
 
 def find_diff(fileA,fileB,suffix):
@@ -40,8 +42,10 @@ def find_diff(fileA,fileB,suffix):
 start = datetime.now()
 
 for picture_name in result:
+    picture_name = picture_name
     file_img = cv2.imread(os.path.join(file, picture_name))
     print(picture_name)
+    # print(os.path.join(file, picture_name))
     with open(label_path, "r") as label_data:
         for i in label_data:  # 逐行读取
             tmp = i.split()

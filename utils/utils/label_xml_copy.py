@@ -5,7 +5,6 @@
 
 import cv2
 import os
-import sys
 import copy
 import time
 import multiprocessing
@@ -31,7 +30,7 @@ class Producer(Process):
             if type(self.food) == list:
                 if len(self.food)==0:
                     print("生产者生产完毕")
-                    sys.exit()                
+                    break                
                 item = self.food.pop()  # left is closed and right is closed.
                 self.queue.put(item)
                 print("Producer-->%s" % item)
@@ -47,20 +46,12 @@ class Consumer(Process):
         self.args = args
 
     def horizontal_mirror_imgs(self, imgs_path, xml_path, item, save_path):
-        tree = xmlET.parse(os.path.join(xml_path, item))
+        # tree = xmlET.parse(os.path.join(imgs_path, item))
+        tree = xmlET.parse(xml_path)
         root = tree.getroot()
-
-        for obj in root.findall('object'):
-            bbox = obj.find('bndbox')
-            # Make pixel indexes 0-based
-            x1 = float(bbox.find('xmin').text)
-            x2 = float(bbox.find('xmax').text)
-            y1 = float(bbox.find('ymin').text)
-            y2 = float(bbox.find('ymax').text)
-
-            if abs(x2 - x1) < 20 or abs(y1 - y2) < 20:
-                root.remove(obj)
-        tree.write(os.path.join(save_path, item))
+        filename = root.find('filename')
+        filename.text = item.split(".")[0]+'.jpg'
+        tree.write(os.path.join(save_path, item.split(".")[0]+'.xml'))
 
  
 
@@ -73,12 +64,12 @@ class Consumer(Process):
 
 
 if __name__ == '__main__':
-	imgs_path = '/media/jdhl/Elements/本安安全帽数据集/JPEGImages'
-	xml_path = '/media/lzc274500/Elements SE/莱西风电数据集/11-14/dataset/Annotations'
-	save_path = '/media/lzc274500/Elements SE/莱西风电数据集/11-14/dataset/Annotations_correction'
-	pathlist = os.listdir(xml_path)
+	imgs_path = '/media/lzc274500/Elements SE/莱西风电数据集/11-14/dataset/JPEGImages'
+	xml_path = '/media/lzc274500/Elements SE/莱西风电数据集/11-14/dataset/ch02_20191114101311~1B4E8H00000321.xml'
+	save_path = '/media/lzc274500/Elements SE/莱西风电数据集/11-14/dataset/Annotations'
+	pathlist = os.listdir(imgs_path)
 	# 统计计算内部的核心进程数
-	if not os.path.exists(save_path):   
+	if not os.path.exists(save_path):
 	  os.makedirs(save_path)
 	cores = multiprocessing.cpu_count()
 	qMar = Manager()
