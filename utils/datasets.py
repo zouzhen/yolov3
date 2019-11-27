@@ -16,7 +16,7 @@ from tqdm import tqdm
 
 from utils.utils import xyxy2xywh, xywh2xyxy
 
-img_formats = ['.bmp', '.jpg', '.jpeg', '.png', '.tif']
+img_formats = ['.bmp', '.jpg', '.jpeg', '.png', '.tif', '.dng']
 vid_formats = ['.mov', '.avi', '.mp4']
 
 # Get orientation exif tag
@@ -370,7 +370,8 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                             b[[1, 3]] = np.clip(b[[1, 3]], 0, h)
                             assert cv2.imwrite(f, img[b[1]:b[3], b[0]:b[2]]), 'Failure extracting classifier boxes'
                 else:
-                    ne += 1  # file empty
+                    ne += 1  # print('empty labels for image %s' % self.img_files[i])  # file empty
+                    # os.system("rm '%s' '%s'" % (self.img_files[i], self.label_files[i]))  # remove
 
                 pbar.desc = 'Reading labels (%g found, %g missing, %g empty for %g images)' % (nf, nm, ne, n)
             assert nf > 0, 'No labels found. Recommend correcting image and label paths.'
@@ -589,8 +590,10 @@ def load_mosaic(self, index):
                 labels[:, 2] = h * (x[:, 2] - x[:, 4] / 2) + padh
                 labels[:, 3] = w * (x[:, 1] + x[:, 3] / 2) + padw
                 labels[:, 4] = h * (x[:, 2] + x[:, 4] / 2) + padh
-
+            else:
+                labels = np.zeros((0, 5), dtype=np.float32)
             labels4.append(labels)
+
     if len(labels4):
         labels4 = np.concatenate(labels4, 0)
 
@@ -765,7 +768,7 @@ def cutout(image, labels):
     return labels
 
 
-def reduce_img_size(path='../data/sm3/images', img_size=1024):  # from utils.datasets import *; reduce_img_size()
+def reduce_img_size(path='../data/sm4/images', img_size=1024):  # from utils.datasets import *; reduce_img_size()
     # creates a new ./images_reduced folder with reduced size images of maximum size img_size
     path_new = path + '_reduced'  # reduced images path
     create_folder(path_new)
@@ -776,7 +779,8 @@ def reduce_img_size(path='../data/sm3/images', img_size=1024):  # from utils.dat
             r = img_size / max(h, w)  # size ratio
             if r < 1.0:
                 img = cv2.resize(img, (int(w * r), int(h * r)), interpolation=cv2.INTER_AREA)  # _LINEAR fastest
-            cv2.imwrite(f.replace(path, path_new), img)
+            fnew = f.replace(path, path_new)  # .replace(Path(f).suffix, '.jpg')
+            cv2.imwrite(fnew, img)
         except:
             print('WARNING: image failure %s' % f)
 
@@ -799,6 +803,15 @@ def convert_images2bmp():
             '/Users/glennjocher/PycharmProjects/', '../')
         with open(label_path.replace('5k', '5k_bmp'), 'w') as file:
             file.write(lines)
+
+
+def imagelist2folder(path='data/coco_64img.txt'):  # from utils.datasets import *; imagelist2folder()
+    # Copies all the images in a text file (list of images) into a folder
+    create_folder(path[:-4])
+    with open(path, 'r') as f:
+        for line in f.read().splitlines():
+            os.system('cp "%s" %s' % (line, path[:-4]))
+            print(line)
 
 
 def create_folder(path='./new_folder'):

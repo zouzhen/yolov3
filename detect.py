@@ -43,7 +43,13 @@ def detect(save_txt=False, save_img=False):
     # Export mode
     if ONNX_EXPORT:
         img = torch.zeros((1, 3) + img_size)  # (1, 3, 320, 192)
-        torch.onnx.export(model, img, 'weights/export.onnx', verbose=True)
+        torch.onnx.export(model, img, 'weights/export.onnx', verbose=False, opset_version=11)
+
+        # Validate exported model
+        import onnx
+        model = onnx.load('weights/export.onnx')  # Load the ONNX model
+        onnx.checker.check_model(model)  # Check that the IR is well formed
+        print(onnx.helper.printable_graph(model.graph))  # Print a human readable representation of the graph
         return
 
     # Half precision
