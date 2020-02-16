@@ -446,7 +446,6 @@ if __name__ == '__main__':
 
         prebias()  # optional
         train()  # train normally
-
     else:  # Evolve hyperparameters (optional)
         opt.notest = True  # only test final epoch
         opt.nosave = True  # only save final checkpoint
